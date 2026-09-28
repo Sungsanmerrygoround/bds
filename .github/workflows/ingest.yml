@@ -1,0 +1,40 @@
+name: ingest
+
+# 매일 KST 07:10 실거래(최근 3개월 재수집 + 신고가·하락 판단), 매주 월요일 KST 07:40 청약홈 입주 물량.
+# 실패하면 GitHub가 저장소 소유자에게 메일을 보낸다.
+on:
+  schedule:
+    - cron: "10 22 * * *" # 매일 22:10 UTC = KST 07:10
+    - cron: "40 22 * * 0" # 일요일 22:40 UTC = KST 월요일 07:40
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "실행할 작업"
+        type: choice
+        options: [daily, supply]
+        default: daily
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '40 22 * * 0' && 'supply' || 'daily') }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run ingest -- "$JOB"
