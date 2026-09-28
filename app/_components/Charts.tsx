@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart,
+  Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart,
   Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ReactNode } from "react";
@@ -57,107 +57,6 @@ function TipBox({ title, rows, note }: { title: string; rows: { color?: string; 
         </div>
       ))}
       {note && <div className="mt-1 text-muted">{note}</div>}
-    </div>
-  );
-}
-
-// ---------- 지역 추이 ----------
-
-export interface TrendPoint {
-  ym: string;
-  trade: number | null;
-  jeonse: number | null;
-  tradeCount: number;
-  jeonseCount: number;
-  partial: boolean; // 신고 기한(계약 후 30일) 때문에 아직 덜 집계된 달
-}
-
-function EndLabel({ x: rx, y: ry, index, lastIndex, text, color }: { x?: number | string; y?: number | string; index?: number; lastIndex: number; text: string; color: string }) {
-  const x = rx == null ? null : Number(rx);
-  const y = ry == null ? null : Number(ry);
-  if (index !== lastIndex || x == null || y == null) return null;
-  return (
-    <g>
-      <circle cx={x} cy={y} r={4} fill={color} stroke="var(--surface)" strokeWidth={2} />
-      <text x={x + 8} y={y + 4} fontSize={12} fill="var(--ink-2)">{text}</text>
-    </g>
-  );
-}
-
-export function TrendChart({ data }: { data: TrendPoint[] }) {
-  const lastT = data.findLastIndex((d) => d.trade != null);
-  const lastJ = data.findLastIndex((d) => d.jeonse != null);
-  return (
-    <div className="h-80 w-full">
-      <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 8, right: 48, bottom: 0, left: 4 }}>
-          <CartesianGrid vertical={false} stroke="var(--grid)" />
-          <XAxis dataKey="ym" ticks={monthTicks(data.map((d) => d.ym))} tickFormatter={ymLabel} {...AXIS} />
-          <YAxis tickFormatter={axisEok} width={56} axisLine={false} {...AXIS} domain={["auto", "auto"]} />
-          <Tooltip
-            cursor={{ stroke: "var(--axis)" }}
-            content={tip((p) => {
-              const d = p.payload as TrendPoint | undefined;
-              if (!d) return null;
-              const ratio = d.trade && d.jeonse ? `${Math.round((d.jeonse / d.trade) * 100)}%` : "-";
-              return (
-                <TipBox
-                  title={`${d.ym.slice(0, 4)}년 ${Number(d.ym.slice(4))}월`}
-                  rows={[
-                    { color: "var(--series-1)", label: `매매 중위가 (${d.tradeCount}건)`, value: d.trade == null ? "-" : eok(d.trade) },
-                    { color: "var(--series-2)", label: `전세 중위가 (${d.jeonseCount}건)`, value: d.jeonse == null ? "-" : eok(d.jeonse) },
-                    { label: "전세가율", value: ratio },
-                  ]}
-                  note={d.partial ? "신고 기한(30일) 안이라 아직 집계 중" : undefined}
-                />
-              );
-            })}
-          />
-          <Line
-            type="monotone" dataKey="trade" stroke="var(--series-1)" strokeWidth={2} dot={false} connectNulls
-            activeDot={{ r: 5, stroke: "var(--surface)", strokeWidth: 2 }} isAnimationActive={false}
-            label={(p) => <EndLabel key="t" {...p} lastIndex={lastT} text="매매" color="var(--series-1)" />}
-          />
-          <Line
-            type="monotone" dataKey="jeonse" stroke="var(--series-2)" strokeWidth={2} dot={false} connectNulls
-            activeDot={{ r: 5, stroke: "var(--surface)", strokeWidth: 2 }} isAnimationActive={false}
-            label={(p) => <EndLabel key="j" {...p} lastIndex={lastJ} text="전세" color="var(--series-2)" />}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-export function VolumeChart({ data }: { data: TrendPoint[] }) {
-  return (
-    <div className="h-48 w-full">
-      <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 8, right: 48, bottom: 0, left: 4 }} barGap={2} barCategoryGap="20%">
-          <CartesianGrid vertical={false} stroke="var(--grid)" />
-          <XAxis dataKey="ym" ticks={monthTicks(data.map((d) => d.ym))} tickFormatter={ymLabel} {...AXIS} />
-          <YAxis width={56} axisLine={false} allowDecimals={false} {...AXIS} />
-          <Tooltip
-            cursor={{ fill: "var(--wash)" }}
-            content={tip((p) => {
-              const d = p.payload as TrendPoint | undefined;
-              if (!d) return null;
-              return (
-                <TipBox
-                  title={`${d.ym.slice(0, 4)}년 ${Number(d.ym.slice(4))}월`}
-                  rows={[
-                    { color: "var(--series-1)", label: "매매", value: `${d.tradeCount}건` },
-                    { color: "var(--series-2)", label: "전세", value: `${d.jeonseCount}건` },
-                  ]}
-                  note={d.partial ? "신고 기한(30일) 안이라 아직 집계 중" : undefined}
-                />
-              );
-            })}
-          />
-          <Bar dataKey="tradeCount" fill="var(--series-1)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          <Bar dataKey="jeonseCount" fill="var(--series-2)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-        </BarChart>
-      </ResponsiveContainer>
     </div>
   );
 }

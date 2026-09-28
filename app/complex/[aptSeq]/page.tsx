@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Dimmed, FilterBar, FilterScope, ParamSelect, RangePicker } from "../../_components/Filters";
+import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
 import { DealScatter, Legend, type DealDot } from "../../_components/Charts";
 import { Badge, Card, Stat } from "../../_components/ui";
 import { formatEok, formatPct } from "@/lib/format";
@@ -74,21 +74,24 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
         {complex.build_year && ` · ${complex.build_year}년 준공`}
       </p>
 
-      <FilterBar>
-        <RangePicker rangeKey={range.key} from={range.from} to={range.to} max={currentYm()} />
-        <ParamSelect
-          label="전용면적"
-          param="area"
-          value={area == null ? "all" : String(area)}
-          options={[
-            ...areas.map((a) => ({ value: String(a), label: `${a}㎡ (${counts.get(a)}건)` })),
-            { value: "all", label: "전체" },
-          ]}
-        />
-      </FilterBar>
-
+      <RailLayout
+        rail={
+          <>
+            <RangeList rangeKey={range.key} from={range.from} to={range.to} max={currentYm()} />
+            <OptionList
+              label="전용면적 · 기간 내 거래"
+              param="area"
+              value={area == null ? "all" : String(area)}
+              options={[
+                ...areas.map((a) => ({ value: String(a), label: `${a}㎡`, aside: `${counts.get(a)}건` })),
+                { value: "all", label: "전체" },
+              ]}
+            />
+          </>
+        }
+      >
       <Dimmed>
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <Stat label="최근 매매" value={formatEok(lastTrade?.price_man)} sub={lastTrade ? `${lastTrade.deal_date} · ${lastTrade.floor ?? "-"}층` : undefined} />
           <Stat label="기간 내 최고가" value={formatEok(maxTrade)} />
           <Stat label="최근 3개월 매매 중위" value={formatEok(recentTrade)} />
@@ -111,9 +114,9 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
           )}
         </Card>
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           <Card title={`매매 ${t.length}건`} subtitle={t.length > TABLE_ROWS ? `최근 ${TABLE_ROWS}건` : undefined}>
-            <table className="tnum w-full text-sm">
+            <table className="mono w-full text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
                   <th className="py-1 text-left font-normal">계약일</th>
@@ -149,7 +152,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
           </Card>
 
           <Card title={`전월세 ${rt.length}건`} subtitle={rt.length > TABLE_ROWS ? `최근 ${TABLE_ROWS}건` : undefined}>
-            <table className="tnum w-full text-sm">
+            <table className="mono w-full text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
                   <th className="py-1 text-left font-normal">계약일</th>
@@ -181,6 +184,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
           </Card>
         </div>
       </Dimmed>
+      </RailLayout>
     </FilterScope>
   );
 }

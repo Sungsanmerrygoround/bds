@@ -11,7 +11,8 @@ export async function getGroups(): Promise<RegionGroup[]> {
   const res = await db()
     .from("region_groups")
     .select("id, name, regions(id, sigungu_name, sort_order)")
-    .order("sort_order");
+    .order("sort_order")
+    .order("sort_order", { referencedTable: "regions" });
   return check(res, "region_groups") as RegionGroup[];
 }
 
@@ -75,6 +76,31 @@ export async function getEvents(f: {
   if (!f.includeDirect) q = q.eq("is_direct", false);
   if (!f.includeInvalid) q = q.is("invalidated_at", null);
   return check(await q, "events") as unknown as EventRow[];
+}
+
+export interface TickerRow {
+  id: number;
+  apt_seq: string;
+  area_type: number;
+  deal_date: string;
+  price_man: number;
+  change_pct: number;
+  complexes: { apt_nm: string };
+}
+
+/** 상단 티커: 유효한 최근 신고가 (비교 거래 3건 이상, 직거래 제외) */
+export async function getTicker(limit = 12): Promise<TickerRow[]> {
+  const res = await db()
+    .from("events")
+    .select("id, apt_seq, area_type, deal_date, price_man, change_pct, complexes!inner(apt_nm)")
+    .eq("type", "NEW_HIGH")
+    .is("invalidated_at", null)
+    .eq("is_direct", false)
+    .gte("ref_sample_count", 3)
+    .order("deal_date", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  return check(res, "ticker") as unknown as TickerRow[];
 }
 
 // ---------- 단지 ----------
@@ -223,6 +249,17 @@ export async function getSupply(from: string, to: string): Promise<{ projects: S
 }
 
 // ---------- 수집 상태 ----------
+
+// 매일 아침 수집하므로 30시간 넘게 성공 기록이 없으면 지연으로 본다
+const STALE_MS = 30 * 3600_000;
+
+export async function getIngestStatus(): Promise<{ finishedAt: string | null; stale: boolean }> {
+  const last = await getLastIngest().catch(() => null);
+  return {
+    finishedAt: last?.finished_at ?? null,
+    stale: !last || Date.now() - new Date(last.finished_at).getTime() > STALE_MS,
+  };
+}
 
 export async function getLastIngest(): Promise<{ finished_at: string; job: string } | null> {
   const res = await db()

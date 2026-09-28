@@ -38,7 +38,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
 
   return (
     <FilterScope>
-      <h1 className="mb-1 text-xl font-semibold">신고가·하락 거래</h1>
+      <h1 className="mb-1 text-2xl font-semibold">신고가·하락 거래</h1>
       <p className="mb-4 text-sm text-ink-2">
         같은 단지·같은 전용면적(소수 첫째 자리) 기준. 신고가 = 계약일 직전 36개월 최고가 초과, 하락 = 직전 6개월 중위가 대비 -10% 이하.
       </p>
@@ -56,8 +56,8 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
           {events.length}건 (신고가 {highs} · 하락 {events.length - highs})
           {events.length >= EVENT_LIMIT && <span className="text-muted"> — 최근 {EVENT_LIMIT}건까지만 표시합니다. 조건을 좁혀 보세요.</span>}
         </p>
-        <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-          <table className="tnum w-full min-w-[760px] text-sm">
+        <div className="panel overflow-x-auto">
+          <table className="mono w-full min-w-[760px] text-[13px]">
             <thead className="text-xs text-muted">
               <tr className="text-right">
                 <th className="px-3 py-2 text-left font-normal">계약일</th>
@@ -73,7 +73,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
             </thead>
             <tbody>
               {events.map((e) => (
-                <tr key={e.id} className={`border-t border-line text-right ${e.invalidated_at ? "text-muted line-through" : ""}`}>
+                <tr key={e.id} className={`border-t border-line text-right hover:bg-wash ${e.invalidated_at ? "text-muted line-through" : ""}`}>
                   <td className="px-3 py-2 text-left">{e.deal_date}</td>
                   <td className="px-3 text-left">
                     <span className="inline-flex gap-1">
@@ -81,7 +81,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
                       {e.is_direct && <Badge>직거래</Badge>}
                     </span>
                   </td>
-                  <td className="px-3 text-left">
+                  <td className="px-3 text-left font-sans">
                     <Link href={`/complex/${encodeURIComponent(e.apt_seq)}?area=${e.area_type}`} className="font-medium hover:underline">
                       {e.complexes.apt_nm}
                     </Link>

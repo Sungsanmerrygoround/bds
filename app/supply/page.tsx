@@ -6,7 +6,7 @@ import { getGroups, getSupply } from "@/lib/queries";
 import { addMonths, currentYm, monthsBetween } from "@/lib/range";
 
 // 지역 그룹 색: 그룹 정렬 순서로 고정(필터로 개수가 바뀌어도 색이 바뀌지 않음)
-const GROUP_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)", "var(--series-5)"];
+const GROUP_COLORS = ["var(--group-1)", "var(--group-2)", "var(--group-3)", "var(--group-4)", "var(--group-5)"];
 
 const WINDOWS = [
   { value: "12", label: "과거 1년 ~ 향후 3년", past: 12, future: 36 },
@@ -60,7 +60,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
 
   return (
     <FilterScope>
-      <h1 className="mb-1 text-xl font-semibold">입주 물량</h1>
+      <h1 className="mb-1 text-2xl font-semibold">입주 물량</h1>
       <p className="mb-4 text-sm text-ink-2">
         청약홈 모집공고의 입주 예정월 기준. 세대수는 공급(분양)세대라 재건축·재개발은 조합원분이 빠져 실제보다 적습니다.
       </p>
@@ -82,7 +82,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
 
         <Card title={`공고 ${list.length}건`}>
           <div className="overflow-x-auto">
-            <table className="tnum w-full min-w-[640px] text-sm">
+            <table className="mono w-full min-w-[640px] text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
                   <th className="py-1 text-left font-normal">입주 예정</th>
@@ -96,10 +96,10 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                 {list.map((p) => (
                   <tr key={p.house_manage_no} className={`border-t border-line text-right ${p.is_excluded ? "text-muted" : ""}`}>
                     <td className={`py-1.5 text-left ${p.move_in_ym < now ? "text-muted" : ""}`}>{formatYm(p.move_in_ym)}</td>
-                    <td className="text-left">
+                    <td className="text-left font-sans">
                       {p.pblanc_url ? <a href={p.pblanc_url} target="_blank" rel="noreferrer" className="hover:underline">{p.house_nm}</a> : p.house_nm}
                     </td>
-                    <td className="text-left text-ink-2">{regionToGroup.get(p.region_id)?.name}</td>
+                    <td className="text-left font-sans text-ink-2">{regionToGroup.get(p.region_id)?.name}</td>
                     <td>{(p.total_households_override ?? p.households).toLocaleString()}</td>
                     <td className="text-left">
                       <span className="inline-flex flex-wrap gap-1 pl-3">

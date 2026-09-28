@@ -20,7 +20,8 @@ export function NavLinks() {
           <Link
             key={l.href}
             href={l.href}
-            className={`rounded-md px-2.5 py-1.5 ${active ? "bg-wash font-semibold text-ink" : "text-ink-2 hover:bg-wash"}`}
+            aria-current={active ? "page" : undefined}
+            className={`flex min-h-11 items-center rounded px-3.5 ${active ? "bg-raised font-semibold text-ink" : "text-ink-2 hover:bg-wash"}`}
           >
             {l.label}
           </Link>
