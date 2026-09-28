@@ -6,6 +6,11 @@
 - `supabase/migrations/` 스키마·집계 함수 (`npm run db:push`로 적용)
 - `app/` 대시보드 (Next.js, 인증 없음. DB 키는 서버에서만 사용)
 
+## 배포
+
+https://bds-black.vercel.app — Vercel(`hj20/bds`, 함수 지역 서울 `icn1`). `main`에 push하면 자동 배포된다.
+Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+
 ## 로컬 실행
 
 1. `.env.example`을 `.env.local`로 복사하고 값을 채운다.
