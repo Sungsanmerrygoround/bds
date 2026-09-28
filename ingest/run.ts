@@ -140,6 +140,7 @@ async function runDeals(args: ReturnType<typeof parseArgs>) {
           errors++;
           const msg = (e as Error).message;
           console.error(`  ✗ ${kind} ${lawd} ${ym}: ${msg}`);
+          if (process.env.GITHUB_ACTIONS) console.log(`::error::${kind} ${lawd} ${ym}: ${msg.replace(/\r?\n/g, " ")}`);
           await db.from("ingest_runs").update({
             status: "error", finished_at: new Date().toISOString(),
             api_calls: counter.calls - callsBefore, error: msg,
@@ -202,5 +203,7 @@ async function main() {
 
 main().catch((e) => {
   console.error(e);
+  // GitHub Actions: 실행 요약 화면에 오류 메시지를 주석으로 표시
+  if (process.env.GITHUB_ACTIONS) console.log(`::error::${String((e as Error).message ?? e).replace(/\r?\n/g, " ")}`);
   process.exit(1);
 });

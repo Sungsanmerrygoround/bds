@@ -37,4 +37,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Secrets 점검 (값은 출력하지 않음)
+        run: |
+          fail=0
+          for name in DATA_GO_KR_SERVICE_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            v="${!name}"
+            if [ -z "$v" ]; then echo "::error::Secret $name 이 비어 있거나 등록되지 않았습니다"; fail=1; continue; fi
+            if [ "$v" != "$(echo "$v" | tr -d '[:space:]\"'"'")" ]; then echo "::error::Secret $name 에 공백·줄바꿈·따옴표가 들어 있습니다"; fail=1; fi
+            echo "$name: ${#v}자"
+          done
+          case "$SUPABASE_URL" in https://*.supabase.co|https://*.supabase.co/) ;; *) echo "::error::SUPABASE_URL 형식이 https://<ref>.supabase.co 가 아닙니다"; fail=1;; esac
+          exit $fail
       - run: npm run ingest -- "$JOB"
