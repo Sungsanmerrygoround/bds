@@ -23,19 +23,24 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col font-sans">
         <GradientDefs />
         <header className="border-b border-line">
-          <div className="mx-auto flex min-h-[60px] max-w-[1400px] flex-wrap items-center gap-x-7 gap-y-1 px-4 sm:px-6">
-            <Link href="/" className="mono flex items-center gap-2.5 text-base font-semibold tracking-wider">
+          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-7 px-4 sm:min-h-[60px] sm:flex-nowrap sm:px-6">
+            <Link href="/" className="mono flex min-h-[52px] items-center gap-2.5 text-base font-semibold tracking-wider">
               <span className="h-2.5 w-2.5 rounded-[2px] bg-s1" />
               BDS
             </Link>
-            <NavLinks />
-            <div className={`mono ml-auto flex items-center gap-2 text-xs ${stale ? "text-warn" : "text-ink-2"}`}>
+            <div className={`mono ml-auto flex items-center gap-2 text-xs sm:order-2 ${stale ? "text-warn" : "text-ink-2"}`}>
               {stale ? (
                 <svg width="14" height="14" aria-hidden="true"><path d="M7 2 L12.5 12 H1.5 Z M7 6 V8.5 M7 10.2 V10.4" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
               ) : (
                 <svg width="14" height="14" aria-hidden="true"><path d="M3 7.5 L6 10.5 L11 4.5" fill="none" stroke="var(--ok)" strokeWidth="2" /></svg>
               )}
-              {stale ? "수집 지연" : "수집 정상"} · {lastText} KST
+              <span className="hidden sm:inline">{stale ? "수집 지연" : "수집 정상"} ·</span>
+              {stale && <span className="sm:hidden">지연</span>}
+              {lastText}
+              <span className="hidden sm:inline">KST</span>
+            </div>
+            <div className="order-last w-full border-t border-line sm:order-1 sm:w-auto sm:border-0">
+              <NavLinks />
             </div>
           </div>
         </header>

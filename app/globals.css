@@ -41,6 +41,7 @@
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-wash: var(--wash);
+  --color-tag: var(--tag);
   --color-up: var(--up);
   --color-down: var(--down);
   --color-ok: var(--ok);

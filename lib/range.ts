@@ -5,6 +5,7 @@ export const RANGE_PRESETS = [
   { key: "1y", label: "1년", months: 12 },
   { key: "2y", label: "2년", months: 24 },
   { key: "3y", label: "3년", months: 36 },
+  { key: "5y", label: "5년", months: 60 },
 ] as const;
 export const DEFAULT_RANGE = "3y";
 
@@ -35,6 +36,25 @@ export function monthsBetween(from: string, to: string): string[] {
 
 const isYm = (v: unknown): v is string =>
   typeof v === "string" && /^\d{6}$/.test(v) && Number(v.slice(4)) >= 1 && Number(v.slice(4)) <= 12;
+
+/**
+ * 신고 기한(계약 후 30일) 때문에 이번 달과 지난달 거래는 아직 덜 집계돼 있다.
+ * 이 달부터(포함) 집계 중으로 본다.
+ */
+export function partialFromYm(now = new Date()): string {
+  return addMonths(currentYm(now), -1);
+}
+
+/** 집계가 끝난 가장 최근 달 */
+export function lastCompleteYm(now = new Date()): string {
+  return addMonths(currentYm(now), -2);
+}
+
+/** 화면 표시용 기간 이름: '3년' 또는 '24.01–24.06' */
+export function rangeLabel(r: MonthRange): string {
+  const preset = RANGE_PRESETS.find((p) => p.key === r.key);
+  return preset ? preset.label : `${r.from.slice(2, 4)}.${r.from.slice(4)}–${r.to.slice(2, 4)}.${r.to.slice(4)}`;
+}
 
 /** 프리셋 N개월 = 이번 달 포함 N개월. 잘못된 값은 기본(3년)으로. */
 export function resolveRange(

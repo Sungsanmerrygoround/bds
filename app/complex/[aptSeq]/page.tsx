@@ -5,7 +5,7 @@ import { DealScatter, Legend, type DealDot } from "../../_components/Charts";
 import { Badge, Card, Stat } from "../../_components/ui";
 import { formatEok, formatPct } from "@/lib/format";
 import { getComplex, getComplexRents, getComplexTrades } from "@/lib/queries";
-import { currentYm, resolveRange } from "@/lib/range";
+import { currentYm, rangeLabel, resolveRange } from "@/lib/range";
 
 const TABLE_ROWS = 50;
 const ts = (date: string) => Date.parse(`${date}T00:00:00Z`);
@@ -75,6 +75,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
       </p>
 
       <RailLayout
+        summary={[area == null ? "전체 면적" : `${area}㎡`, rangeLabel(range)]}
         rail={
           <>
             <RangeList rangeKey={range.key} from={range.from} to={range.to} max={currentYm()} />

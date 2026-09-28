@@ -63,7 +63,12 @@ export async function storeMonth(
 
   for (let i = 0; i < rows.length; i += CHUNK) {
     // first_seen_at은 넣지 않는다 → 신규일 때만 default(now())가 들어감
-    const chunk = rows.slice(i, i + CHUNK).map((r) => ({ ...r, last_seen_at: now, missing_since: null }));
+    // raw(원본 응답)도 넣지 않는다 → 용량 절약. 기존 행의 raw는 upsert 대상 컬럼이 아니라 그대로 남는다.
+    const chunk = rows.slice(i, i + CHUNK).map((r) => {
+      const row: Record<string, unknown> = { ...r, last_seen_at: now, missing_since: null };
+      delete row.raw;
+      return row;
+    });
     const res = await db
       .from(table)
       .upsert(chunk, { onConflict: key })

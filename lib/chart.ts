@@ -105,6 +105,27 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
   return out;
 }
 
+/**
+ * 축 태그처럼 세로로 겹치면 안 되는 라벨들의 y를 최소 간격 gap으로 벌린다.
+ * 순서는 유지하고, [lo, hi] 밖으로 밀려나면 반대쪽으로 다시 민다.
+ */
+export function spreadLabels(ys: number[], gap: number, lo: number, hi: number): number[] {
+  const order = ys.map((y, i) => ({ y, i })).sort((a, b) => a.y - b.y);
+  const pos = order.map((o) => o.y);
+  for (let k = 0; k < pos.length; k++) pos[k] = Math.max(pos[k], k === 0 ? lo : pos[k - 1] + gap);
+  for (let k = pos.length - 1; k >= 0; k--) pos[k] = Math.min(pos[k], k === pos.length - 1 ? hi : pos[k + 1] - gap);
+  const out = new Array<number>(ys.length);
+  order.forEach((o, k) => (out[o.i] = pos[k]));
+  return out;
+}
+
+/** 지수: 첫 거래 3개월 평균 = 100. 한 달짜리 기준은 그달 거래 구성에 따라 흔들린다. */
+export function toIndex(values: (number | null)[]): (number | null)[] {
+  const first = values.filter((v): v is number => v != null).slice(0, 3);
+  const base = first.length ? first.reduce((a, b) => a + b, 0) / first.length : 0;
+  return values.map((v) => (v == null || !base ? null : (v / base) * 100));
+}
+
 /** 둥근 윗모서리 막대 경로 */
 export function barPath(x: number, w: number, top: number, base: number, radius = 2): string {
   if (base - top < 0.5) return "";

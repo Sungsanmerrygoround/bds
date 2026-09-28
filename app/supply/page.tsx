@@ -3,10 +3,8 @@ import { Legend, SupplyChart, type SupplyPoint } from "../_components/Charts";
 import { Badge, Card, Stat } from "../_components/ui";
 import { formatYm } from "@/lib/format";
 import { getGroups, getSupply } from "@/lib/queries";
+import { groupColor } from "@/lib/groups";
 import { addMonths, currentYm, monthsBetween } from "@/lib/range";
-
-// 지역 그룹 색: 그룹 정렬 순서로 고정(필터로 개수가 바뀌어도 색이 바뀌지 않음)
-const GROUP_COLORS = ["var(--group-1)", "var(--group-2)", "var(--group-3)", "var(--group-4)", "var(--group-5)"];
 
 const WINDOWS = [
   { value: "12", label: "과거 1년 ~ 향후 3년", past: 12, future: 36 },
@@ -29,7 +27,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
 
   const regionToGroup = new Map(groups.flatMap((g) => g.regions.map((r) => [r.id, g] as const)));
   const shownGroups = groups.filter((g) => groupId == null || g.id === groupId);
-  const series = shownGroups.map((g) => ({ key: `g${g.id}`, label: g.name, color: GROUP_COLORS[groups.indexOf(g) % GROUP_COLORS.length] }));
+  const series = shownGroups.map((g) => ({ key: `g${g.id}`, label: g.name, color: groupColor(groups.indexOf(g)) }));
 
   const inScope = (regionId: number) => groupId == null || regionToGroup.get(regionId)?.id === groupId;
   const counted = projects.filter((p) => !p.is_excluded && inScope(p.region_id));

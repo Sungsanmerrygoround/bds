@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monotoneSlopes, niceTicks, runs, seriesPaths } from "./chart";
+import { monotoneSlopes, niceTicks, runs, seriesPaths, spreadLabels, toIndex } from "./chart";
 
 describe("chart", () => {
   it("niceTicks: 1·2·5 간격, 범위를 감싼다", () => {
@@ -17,6 +17,24 @@ describe("chart", () => {
   it("monotoneSlopes: 극값에서 기울기 0 (넘침 없음)", () => {
     const t = monotoneSlopes([[0, 0], [1, 10], [2, 0]]);
     expect(t[1]).toBe(0);
+  });
+
+  it("toIndex: 첫 거래 3개월 평균 = 100, 빈 달은 건너뜀", () => {
+    const a = toIndex([null, 90, 100, 110, 150]);
+    expect(a[0]).toBeNull();
+    [90, 100, 110, 150].forEach((v, i) => expect(a[i + 1]).toBeCloseTo(v, 9));
+    const b = toIndex([100, 200]);
+    expect(b[0]).toBeCloseTo(200 / 3, 9);
+    expect(b[1]).toBeCloseTo(400 / 3, 9);
+    expect(toIndex([null, null])).toEqual([null, null]);
+  });
+
+  it("spreadLabels: 겹치는 라벨을 간격만큼 벌리고 순서·범위 유지", () => {
+    expect(spreadLabels([100, 105, 300], 20, 0, 400)).toEqual([100, 120, 300]);
+    // 원래 순서가 아닌 입력도 y 순서 기준으로 벌린다
+    expect(spreadLabels([105, 100], 20, 0, 400)).toEqual([120, 100]);
+    // 아래 끝에 몰리면 위로 밀어 올린다
+    expect(spreadLabels([395, 398, 399], 20, 0, 400)).toEqual([360, 380, 400]);
   });
 
   it("seriesPaths: 집계 중 구간은 점선, 확정 구간과 한 점 겹침", () => {

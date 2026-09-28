@@ -5,6 +5,14 @@
 - `ingest/` 수집 스크립트 (`npm run ingest -- backfill | daily | supply`)
 - `supabase/migrations/` 스키마·집계 함수 (`npm run db:push`로 적용)
 - `app/` 대시보드 (Next.js, 인증 없음. DB 키는 서버에서만 사용)
+  - `/` 추이 · `/compare` 지역 비교 · `/events` 신고가·하락 · `/complex` 단지 · `/supply` 입주 물량
+  - 넓은 화면은 왼쪽 필터 레일, 좁은 화면(1024px 미만)은 요약 칩 + 바텀시트
+- `lib/` 순수 로직(기간·면적 구간·차트 경로)과 서버 전용 DB 조회(`queries.ts`)
+
+## 데이터 범위와 용량
+
+매매·전월세는 2021년 10월부터 5년치를 보관한다(Supabase 무료 한도 500MB 안). 과거 달을 더 받으려면
+`npm run ingest -- backfill --from YYYYMM --to YYYYMM`. 새로 받는 거래는 원본 응답(`raw`)을 저장하지 않는다.
 
 ## 배포
 
