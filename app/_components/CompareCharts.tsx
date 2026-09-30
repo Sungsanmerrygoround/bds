@@ -5,31 +5,40 @@ import { niceTicks, seriesPaths, spreadLabels, toIndex } from "@/lib/chart";
 import { longYm } from "@/lib/format";
 import { axisLayout, chartPad, chartPanel, fx, pointerSelect, Swatch, Tag, timeScale, useWidth, XAxis, YearMarks, YLabel } from "./chartKit";
 
-// 지역 비교: 지역별 매매 중위가 선 차트 + 월별 매매 거래량 선 차트.
-// 두 차트는 같은 시간축과 크로스헤어를 공유하고, 범례로 지역을 켜고 끈다.
-// 색은 지역에 고정(그룹 정렬 순서) — 지역을 꺼도 나머지 색이 바뀌지 않는다.
+// 비교 차트: 대상(지역 또는 단지)별 가격 선 차트 + 월별 거래량 선 차트.
+// 두 차트는 같은 시간축과 크로스헤어를 공유하고, 범례로 대상을 켜고 끈다.
+// 색은 대상에 고정 — 하나를 꺼도 나머지 색이 바뀌지 않는다.
 
 export interface CompareSeries {
-  id: number;
+  id: number | string;
   name: string;
   color: string;
-  price: (number | null)[]; // 매매 중위가(만원), months와 같은 길이
-  count: number[]; // 매매 건수
+  price: (number | null)[]; // 가격(만원), months와 같은 길이
+  count: number[]; // 거래 건수
 }
 
 const PH = 340, PT = 24, PB = 6;
 const VH = 200, VT = 16, VB = 6;
 const XH = 26;
 
-export function CompareCharts({ months, partialFrom, series, mode }: {
+export interface CompareLabels {
+  price: string; // 가격 차트 제목
+  count: string; // 거래량 차트 제목
+  noun: string; // 켜고 끄는 대상 (지역·단지)
+}
+
+const REGION_LABELS: CompareLabels = { price: "지역별 매매 중위가", count: "지역별 월별 매매 거래량", noun: "지역" };
+
+export function CompareCharts({ months, partialFrom, series, mode, labels = REGION_LABELS }: {
   months: string[];
   partialFrom: number; // 이 인덱스부터 집계 중(점선)
   series: CompareSeries[];
   mode: "price" | "index";
+  labels?: CompareLabels;
 }) {
   const { ref, w } = useWidth();
   const [hover, setHover] = useState<number | null>(null);
-  const [hidden, setHidden] = useState<Set<number>>(new Set());
+  const [hidden, setHidden] = useState<Set<number | string>>(new Set());
 
   const n = months.length;
   const shown = series.filter((s) => !hidden.has(s.id));
@@ -40,11 +49,11 @@ export function CompareCharts({ months, partialFrom, series, mode }: {
   const fmt = (v: number | null) => (v == null ? "-" : mode === "price" ? `${v.toFixed(2)}억` : v.toFixed(0));
   const tagFmt = (v: number) => (mode === "price" ? v.toFixed(2) : v.toFixed(0));
 
-  const toggle = (id: number) =>
+  const toggle = (id: number | string) =>
     setHidden((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
-      else if (series.length - next.size > 1) next.add(id); // 최소 한 지역은 남긴다
+      else if (series.length - next.size > 1) next.add(id); // 최소 하나는 남긴다
       return next;
     });
 
@@ -115,13 +124,13 @@ export function CompareCharts({ months, partialFrom, series, mode }: {
       <section className={chartPanel}>
         <div className={`${chartPad} flex flex-wrap items-center justify-between gap-2`}>
           <h2 className="text-sm font-semibold">
-            지역별 매매 중위가{" "}
+            {labels.price}{" "}
             <span className="mono text-xs font-normal text-muted">{mode === "price" ? "억 원" : "지수 · 기간 첫 3개월 평균 = 100"}</span>
           </h2>
           <span className="mono text-[11px] text-muted">점선 = 신고 기한(30일) 안이라 집계 중</span>
         </div>
 
-        <div role="group" aria-label="표시할 지역" className={`${chartPad} flex gap-1.5 overflow-x-auto sm:flex-wrap`}>
+        <div role="group" aria-label={`표시할 ${labels.noun}`} className={`${chartPad} flex gap-1.5 overflow-x-auto sm:flex-wrap`}>
           {series.map((s) => {
             const on = !hidden.has(s.id);
             return (
@@ -144,7 +153,7 @@ export function CompareCharts({ months, partialFrom, series, mode }: {
         <div ref={ref} className="w-full select-none" style={{ minHeight: PH + XH }}>
           {w > 0 && (
             <>
-              <svg width={w} height={PH} className="block" role="img" aria-label="지역별 월별 매매 중위가 비교 차트" {...pointer}>
+              <svg width={w} height={PH} className="block" role="img" aria-label={`${labels.price} 비교 차트`} {...pointer}>
                 {grid(pt, py)}
                 <YearMarks ts={ts} height={PH} />
                 {mode === "index" && <path d={`M${L0} ${fx(py(100))} H${w - R0}`} stroke="var(--muted)" strokeDasharray="4 3" />}
@@ -165,14 +174,14 @@ export function CompareCharts({ months, partialFrom, series, mode }: {
       <section className={chartPanel}>
         <div className={`${chartPad} flex flex-wrap items-center justify-between gap-2`}>
           <h2 className="text-sm font-semibold">
-            지역별 월별 매매 거래량 <span className="mono text-xs font-normal text-muted">건</span>
+            {labels.count} <span className="mono text-xs font-normal text-muted">건</span>
           </h2>
         </div>
         {readout((s) => String(s.count[h]), <>합계 <span className="text-ink">{shown.reduce((sum, s) => sum + s.count[h], 0)}</span></>)}
         <div className="w-full select-none" style={{ minHeight: VH + XH }}>
           {w > 0 && (
             <>
-              <svg width={w} height={VH} className="block" role="img" aria-label="지역별 월별 매매 거래량 비교 차트" {...pointer}>
+              <svg width={w} height={VH} className="block" role="img" aria-label={`${labels.count} 비교 차트`} {...pointer}>
                 {grid(ct, cy)}
                 <YearMarks ts={ts} height={VH} labels={false} />
                 {shown.map((s) => <Line key={s.id} values={s.count} x={X} y={cy} base={VH} partial={partialFrom} color={s.color} width={1.75} />)}

@@ -1,17 +1,22 @@
 import Link from "next/link";
+import { FavButton } from "../_components/FavButton";
+import { getFavorites } from "@/lib/favorites";
 import { getGroups, searchComplexes } from "@/lib/queries";
 
 export default async function ComplexSearchPage({ searchParams }: PageProps<"/complex">) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
-  const groups = await getGroups();
+  const [groups, favs] = await Promise.all([getGroups(), getFavorites()]);
   const groupId = groups.find((g) => String(g.id) === sp.g)?.id ?? null;
   const rows = await searchComplexes(q, groupId);
   const input = "min-h-10 rounded border border-line bg-surface-2 px-2.5 text-sm text-ink";
 
   return (
     <>
-      <h1 className="mb-4 text-2xl font-semibold">단지</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold">단지</h1>
+        <Link href="/complex/compare" className="flex min-h-10 items-center rounded border border-line px-3 text-sm text-ink-2 hover:bg-wash">단지 비교</Link>
+      </div>
       <form className="panel mb-4 flex flex-wrap items-end gap-3 px-4 py-3" action="/complex">
         <label className="block">
           <span className="cap mb-1 block">단지명</span>
@@ -45,7 +50,10 @@ export default async function ComplexSearchPage({ searchParams }: PageProps<"/co
             {rows.map((r) => (
               <tr key={r.apt_seq} className="border-t border-line text-right hover:bg-wash">
                 <td className="px-3 py-2 text-left font-sans">
-                  <Link href={`/complex/${encodeURIComponent(r.apt_seq)}`} className="font-medium hover:underline">{r.apt_nm}</Link>
+                  <span className="flex items-center gap-1">
+                    <FavButton aptSeq={r.apt_seq} on={favs.includes(r.apt_seq)} name={r.apt_nm} />
+                    <Link href={`/complex/${encodeURIComponent(r.apt_seq)}`} className="font-medium hover:underline">{r.apt_nm}</Link>
+                  </span>
                 </td>
                 <td className="px-3 text-left font-sans text-ink-2">{r.sigungu_name} {r.umd_nm}</td>
                 <td className="px-3">{r.build_year ?? "-"}</td>

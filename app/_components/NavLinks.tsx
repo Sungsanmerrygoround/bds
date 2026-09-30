@@ -6,9 +6,12 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "추이" },
   { href: "/compare", label: "지역 비교" },
+  { href: "/rank", label: "순위" },
+  { href: "/renewal", label: "전세 갱신" },
   { href: "/events", label: "신고가·하락" },
   { href: "/complex", label: "단지" },
   { href: "/supply", label: "입주 물량" },
+  { href: "/watch", label: "★ 관심" },
 ] as const;
 
 export function NavLinks() {

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Badge } from "../_components/ui";
 import { formatEok, formatPct } from "@/lib/format";
-import { EVENT_LIMIT, getEvents, getGroups } from "@/lib/queries";
+import { EVENT_LIMIT, getEvents, getGroups, type EventRow } from "@/lib/queries";
+import { todayKst } from "@/lib/range";
+import { isUnregistered, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const PERIODS = [
   { value: "1", label: "최근 1개월" },
@@ -35,6 +37,9 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
     since: since.toISOString().slice(0, 10),
   });
   const highs = events.filter((e) => e.type === "NEW_HIGH").length;
+  const today = todayKst();
+  const unreg = (e: EventRow) => !!e.apt_trades && isUnregistered({ deal_date: e.deal_date, ...e.apt_trades }, today);
+  const unregCount = events.filter(unreg).length;
 
   return (
     <FilterScope>
@@ -54,6 +59,8 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
       <Dimmed>
         <p className="mb-2 text-sm text-ink-2">
           {events.length}건 (신고가 {highs} · 하락 {events.length - highs})
+          {unregCount > 0 && <span className="text-warn"> · 미등기 {unregCount}건</span>}
+          {unregCount > 0 && <span className="text-muted"> (계약 후 {UNREGISTERED_DAYS}일이 지나도 등기 정보 없음 — 잔금이 긴 정상 거래일 수도 있습니다)</span>}
           {events.length >= EVENT_LIMIT && <span className="text-muted"> — 최근 {EVENT_LIMIT}건까지만 표시합니다. 조건을 좁혀 보세요.</span>}
         </p>
         <div className="panel overflow-x-auto">
@@ -79,6 +86,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
                     <span className="inline-flex gap-1">
                       {e.type === "NEW_HIGH" ? <Badge tone="up">▲ 신고가</Badge> : <Badge tone="down">▼ 하락</Badge>}
                       {e.is_direct && <Badge>직거래</Badge>}
+                      {unreg(e) && <Badge tone="warn">미등기</Badge>}
                     </span>
                   </td>
                   <td className="px-3 text-left font-sans">

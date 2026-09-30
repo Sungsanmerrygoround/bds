@@ -1,10 +1,12 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { CompareCharts, type CompareSeries } from "../_components/CompareCharts";
+import { PeakTable } from "../_components/PeakTable";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
-import { formatEok, formatYm } from "@/lib/format";
+import { formatEok, formatYm, shortYm } from "@/lib/format";
 import { groupColor } from "@/lib/groups";
 import { getGroups, getTrend } from "@/lib/queries";
-import { currentYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { peakRecovery } from "@/lib/stats";
 
 export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
   const sp = await searchParams;
@@ -13,7 +15,15 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
   const mode = sp.view === "index" ? "index" : "price";
 
   const groups = await getGroups();
-  const trends = await Promise.all(groups.map((g) => getTrend(g.id, band, range.from, range.to)));
+  // 전고점 대비를 위해 보관 기간 전체를 받고, 차트는 기간만 쓴다
+  const histFrom = [range.from, DATA_START].sort()[0];
+  const trends = await Promise.all(groups.map((g) => getTrend(g.id, band, histFrom, range.to)));
+  const histMonths = monthsBetween(histFrom, range.to);
+  const lastDone = lastCompleteYm();
+  const peaks = groups.map((g, i) => {
+    const byYm = new Map(trends[i].map((r) => [r.ym, r.trade_median]));
+    return { key: String(g.id), label: g.name, color: groupColor(i), peak: peakRecovery(histMonths, histMonths.map((m) => byYm.get(m) ?? null), lastDone) };
+  });
 
   const months = monthsBetween(range.from, range.to);
   const partialYm = partialFromYm();
@@ -65,6 +75,11 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
             <CompareCharts months={months} partialFrom={partialFrom} series={series} mode={mode} />
           ) : (
             <p className="panel py-16 text-center text-sm text-muted">이 조건에 해당하는 거래가 없습니다.</p>
+          )}
+
+          {hasData && (
+            <PeakTable title={`매매 전고점 대비 · ${bandText(band)}`} rows={peaks}
+              note={`${shortYm(DATA_START)} 이후 월별 중위가의 3개월 이동평균 기준`} />
           )}
 
           <details className="panel px-4 py-3 text-sm">

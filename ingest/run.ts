@@ -2,6 +2,7 @@
 //   npm run ingest -- backfill                  최근 36개월 매매·전월세 (이벤트 판단 안 함 = 기준선)
 //   npm run ingest -- daily                     최근 3개월 재수집 + 신고가·하락 판단
 //   npm run ingest -- supply                    청약홈 입주 물량
+//   npm run ingest -- refresh                   3~8개월 전 매매 재수집 (나중에 채워지는 등기일·해제 반영, 이벤트 판단 안 함)
 // 옵션: --lawd 41117,41131  --from 202607 --to 202607  --kind trade|rent  --dry(DB 없이 결과만 출력)
 
 import { randomUUID } from "node:crypto";
@@ -13,12 +14,12 @@ import { fetchMonth, type Kind } from "./molit";
 import { normalizeRents, normalizeTrades, type Region } from "./normalize";
 import { storeMonth, upsertComplexes } from "./store";
 
-type Job = "backfill" | "daily" | "supply";
+type Job = "backfill" | "daily" | "supply" | "refresh";
 
 function parseArgs(argv: string[]) {
   const [job, ...rest] = argv;
-  if (!["backfill", "daily", "supply"].includes(job)) {
-    throw new Error("사용법: run.ts <backfill|daily|supply> [--lawd A,B] [--from YYYYMM --to YYYYMM] [--kind trade|rent] [--dry]");
+  if (!["backfill", "daily", "supply", "refresh"].includes(job)) {
+    throw new Error("사용법: run.ts <backfill|daily|supply|refresh> [--lawd A,B] [--from YYYYMM --to YYYYMM] [--kind trade|rent] [--dry]");
   }
   const opt = (name: string) => {
     const i = rest.indexOf(`--${name}`);
@@ -29,7 +30,8 @@ function parseArgs(argv: string[]) {
     lawd: opt("lawd")?.split(","),
     from: opt("from"),
     to: opt("to"),
-    kinds: (opt("kind") ? [opt("kind")] : ["trade", "rent"]) as Kind[],
+    // refresh는 등기일 반영용이라 매매만
+    kinds: (opt("kind") ? [opt("kind")] : job === "refresh" ? ["trade"] : ["trade", "rent"]) as Kind[],
     dry: rest.includes("--dry"),
   };
 }
@@ -43,6 +45,13 @@ function recentMonths(n: number): string[] {
     out.push(`${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
   }
   return out;
+}
+
+/** 주간 재수집 범위: N~M개월 전 계약월 (daily가 다시 받는 최근 달은 뺀다) */
+async function refreshMonths(db: ReturnType<typeof serviceClient>): Promise<string[]> {
+  const from = await getSettingNum(db, "refresh_months_from", 3);
+  const to = await getSettingNum(db, "refresh_months_to", 8);
+  return recentMonths(to + 1).slice(0, to - from + 1);
 }
 
 function monthRange(from: string, to: string): string[] {
@@ -106,6 +115,7 @@ async function runDeals(args: ReturnType<typeof parseArgs>) {
   const months =
     args.from ? monthRange(args.from, args.to ?? args.from)
     : args.job === "daily" ? recentMonths(await getSettingNum(db, "daily_lookback_months", 3))
+    : args.job === "refresh" ? await refreshMonths(db)
     : recentMonths(36);
 
   console.log(`[${args.job}] batch=${batchId} 지역 ${lawdCodes.join(",")} / ${months[0]}~${months.at(-1)} / ${args.kinds.join("+")}`);

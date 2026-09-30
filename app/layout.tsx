@@ -39,7 +39,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               {lastText}
               <span className="hidden sm:inline">KST</span>
             </div>
-            <div className="order-last w-full border-t border-line sm:order-1 sm:w-auto sm:border-0">
+            <div className="order-last w-full border-t border-line sm:order-1 sm:w-auto sm:min-w-0 sm:flex-1 sm:border-0">
               <NavLinks />
             </div>
           </div>

@@ -2,19 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
 import { DealScatter, Legend, type DealDot } from "../../_components/Charts";
+import { FavButton } from "../../_components/FavButton";
 import { Badge, Card, Stat } from "../../_components/ui";
+import { getFavorites } from "@/lib/favorites";
 import { formatEok, formatPct } from "@/lib/format";
 import { getComplex, getComplexRents, getComplexTrades } from "@/lib/queries";
-import { currentYm, rangeLabel, resolveRange } from "@/lib/range";
+import { currentYm, rangeLabel, resolveRange, todayKst } from "@/lib/range";
+import { isUnregistered, median, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const TABLE_ROWS = 50;
 const ts = (date: string) => Date.parse(`${date}T00:00:00Z`);
-const median = (xs: number[]) => {
-  if (xs.length === 0) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-};
 
 export default async function ComplexPage({ params, searchParams }: PageProps<"/complex/[aptSeq]">) {
   const { aptSeq: raw } = await params;
@@ -22,10 +19,11 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
   const sp = await searchParams;
   const range = resolveRange(sp);
 
-  const [complex, trades, rents] = await Promise.all([
+  const [complex, trades, rents, favs] = await Promise.all([
     getComplex(aptSeq),
     getComplexTrades(aptSeq, range.from, range.to),
     getComplexRents(aptSeq, range.from, range.to),
+    getFavorites(),
   ]);
   if (!complex) notFound();
 
@@ -56,6 +54,9 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
     tag: r.contract_type ? `${r.contract_type}${r.use_rr_right ? "(갱신요구권)" : ""}` : undefined,
   }));
 
+  const today = todayKst();
+  const unregistered = validTrades.filter((r) => isUnregistered(r, today)).length;
+
   // 요약
   const lastTrade = validTrades[0];
   const maxTrade = validTrades.reduce<number | null>((m, r) => (m == null || r.price_man > m ? r.price_man : m), null);
@@ -67,7 +68,16 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
   return (
     <FilterScope>
       <Link href="/complex" className="text-sm text-ink-2 hover:underline">← 단지 목록</Link>
-      <h1 className="mt-2 text-xl font-semibold">{complex.apt_nm}</h1>
+      <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1">
+        <h1 className="text-xl font-semibold">{complex.apt_nm}</h1>
+        <FavButton aptSeq={complex.apt_seq} on={favs.includes(complex.apt_seq)} name={complex.apt_nm} size="lg" />
+        <Link
+          href={`/complex/compare?ids=${encodeURIComponent(complex.apt_seq)}`}
+          className="ml-auto flex min-h-10 items-center rounded border border-line px-3 text-sm text-ink-2 hover:bg-wash"
+        >
+          다른 단지와 비교
+        </Link>
+      </div>
       <p className="mb-4 text-sm text-ink-2">
         {complex.regions.sigungu_name} {complex.umd_nm} {complex.jibun}
         {complex.road_nm && ` · ${complex.road_nm}`}
@@ -116,7 +126,15 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
         </Card>
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <Card title={`매매 ${t.length}건`} subtitle={t.length > TABLE_ROWS ? `최근 ${TABLE_ROWS}건` : undefined}>
+          <Card
+            title={`매매 ${t.length}건`}
+            subtitle={
+              [
+                t.length > TABLE_ROWS ? `최근 ${TABLE_ROWS}건` : null,
+                unregistered ? `미등기 ${unregistered}건: 계약 후 ${UNREGISTERED_DAYS}일이 지나도 등기 정보가 없는 거래` : null,
+              ].filter(Boolean).join(" · ") || undefined
+            }
+          >
             <table className="mono w-full text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
@@ -141,6 +159,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
                         <span className="inline-flex flex-wrap gap-1 pl-3">
                           {ev && (ev.type === "NEW_HIGH" ? <Badge tone="up">▲ 신고가</Badge> : <Badge tone="down">▼ 하락</Badge>)}
                           {r.is_direct && <Badge>직거래</Badge>}
+                          {!bad && isUnregistered(r, today) && <Badge tone="warn">미등기</Badge>}
                           {r.is_cancelled && <Badge>해제</Badge>}
                           {r.missing_since && !r.is_cancelled && <Badge>정정·삭제</Badge>}
                         </span>

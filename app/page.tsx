@@ -1,10 +1,12 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "./_components/Filters";
+import { PeakTable } from "./_components/PeakTable";
 import { TrendTerminal, type TermPoint } from "./_components/TrendTerminal";
 import { Spark, SparkBars, Stat } from "./_components/ui";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { formatEok, formatYm, shortYm } from "@/lib/format";
 import { getGroups, getTrend } from "@/lib/queries";
-import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { peakRecovery } from "@/lib/stats";
 
 const ratioOf = (d?: TermPoint) => (d?.trade && d.jeonse ? (d.jeonse / d.trade) * 100 : null);
 const pct = (a?: number | null, b?: number | null) => (a && b ? (a / b - 1) * 100 : null);
@@ -23,8 +25,8 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const partialFrom = partialFromYm();
   const lastDone = lastCompleteYm();
 
-  // 1년 전 비교·12개월 스파크라인을 위해 최소 24개월은 받는다
-  const fetchFrom = [range.from, addMonths(range.to, -23)].sort()[0];
+  // 전고점 대비를 위해 보관 기간 전체를 받는다 (1년 전 비교·12개월 스파크라인도 여기서)
+  const fetchFrom = [range.from, DATA_START].sort()[0];
   const [rows, groupLatest] = await Promise.all([
     getTrend(group.id, band, fetchFrom, range.to),
     Promise.all(groups.map((g) => getTrend(g.id, band, lastDone, lastDone).then((r) => r[0]?.trade_median ?? null))),
@@ -53,6 +55,11 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const tp = pct(latest?.trade, yearAgo?.trade);
   const jp = pct(latest?.jeonse, yearAgo?.jeonse);
   const rNow = ratioOf(latest), rAgo = ratioOf(yearAgo);
+  const fullMonths = full.map((d) => d.ym);
+  const peaks = [
+    { key: "t", label: "매매", color: "var(--series-1)", peak: peakRecovery(fullMonths, full.map((d) => d.trade), lastDone) },
+    { key: "j", label: "전세", color: "var(--series-2)", peak: peakRecovery(fullMonths, full.map((d) => d.jeonse), lastDone) },
+  ];
   const rd = rNow != null && rAgo != null ? rNow - rAgo : null;
 
   return (
@@ -133,6 +140,11 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
             <p className="panel py-16 text-center text-sm text-muted">이 조건에 해당하는 거래가 없습니다.</p>
           ) : (
             <TrendTerminal data={chart} title={`${group.name} · ${bandText(band)}`} />
+          )}
+
+          {rows.length > 0 && (
+            <PeakTable title={`전고점 대비 · ${group.name} · ${bandText(band)}`} rows={peaks}
+              note={`${shortYm(DATA_START)} 이후 월별 중위가의 3개월 이동평균 기준`} />
           )}
 
           <details className="panel px-4 py-3 text-sm">

@@ -78,6 +78,58 @@ describe("trend_monthly", () => {
   });
 });
 
+describe("complex_rank", () => {
+  it("12개월·최근 3개월·1년 전 3개월 중위, 3.3㎡당 가격, 최고가", async () => {
+    await db.exec(`insert into complexes (apt_seq, region_id, lawd_cd, apt_nm, build_year) values ('R-1', 1, '41117', '순위', 2010)`);
+    await trade({ date: "2017-06-01", price: 99000, seq: "R-1" }); // 12개월 밖이지만 최고가
+    await trade({ date: "2017-07-01", price: 60000, seq: "R-1" }); // 1년 전 3개월(1707~1709)
+    await trade({ date: "2018-01-10", price: 70000, seq: "R-1" });
+    await trade({ date: "2018-08-10", price: 80000, seq: "R-1" }); // 최근 3개월(1807~1809)
+    await trade({ date: "2018-09-10", price: 90000, seq: "R-1", cancelled: true });
+    const r = await db.query<Record<string, unknown>>("select * from complex_rank(1, 84::smallint, '201809') where apt_seq = 'R-1'");
+    expect(r.rows[0]).toMatchObject({
+      trades_12m: 2, median_12m: 75000, recent_median: 80000, recent_count: 1,
+      year_ago_median: 60000, year_ago_count: 1, peak_price: 99000, build_year: 2010,
+    });
+    // 84.97㎡ → 3.3㎡당 = 가격 / 84.97 * 3.305785
+    expect(r.rows[0].ppa_12m).toBe(Math.round((70000 / 84.97 * 3.305785 + 80000 / 84.97 * 3.305785) / 2));
+    const peak = r.rows[0].peak_date as Date; // PGlite는 date를 로컬 자정 Date로 준다
+    expect([peak.getFullYear(), peak.getMonth() + 1, peak.getDate()]).toEqual([2017, 6, 1]);
+  });
+});
+
+describe("renewal_monthly · renewal_drops", () => {
+  it("신규/갱신 수, 갱신요구권, 전세→전세 갱신의 보증금 변동률 중위와 감액 건수", async () => {
+    const ins = (key: string, type: string | null, dep: number, pre: number | null, rent = 0, rr = false) =>
+      db.query(`insert into apt_rents (rent_key, apt_seq, region_id, lawd_cd, deal_ymd, deal_date, deposit_man, monthly_rent_man,
+                  exclu_area, contract_type, use_rr_right, pre_deposit_man, pre_monthly_rent_man, raw)
+                values ($1, 'T-2', 1, '41117', '201805', '2018-05-03', $2, $3, 84.9, $4, $5, $6, 0, '{}')`,
+        [key, dep, rent, type, rr ? true : null, pre]);
+    await ins("n1", "신규", 50000, null);
+    await ins("g1", "갱신", 45000, 50000, 0, true); // -10%
+    await ins("g2", "갱신", 52500, 50000);          // +5%
+    await ins("g3", "갱신", 55000, 50000);          // +10%
+    await ins("g4", "갱신", 20000, 50000, 100);      // 월세 전환 → 변동률 계산 제외
+    await ins("x1", null, 40000, null);              // 구분 없음 → 제외
+    const r = await db.query<Record<string, unknown>>("select * from renewal_monthly(1, 84::smallint, '201805', '201805')");
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({ new_count: 1, renew_count: 4, rr_count: 1, jeonse_renew_count: 3, down_count: 1, up_count: 2,
+      free_count: 2, rr_jeonse_count: 1 });
+    expect(Number(r.rows[0].change_median)).toBe(5);
+    expect(Number(r.rows[0].free_change_median)).toBe(7.5); // +5%, +10%
+    expect(Number(r.rows[0].rr_change_median)).toBe(-10);
+    const d = await db.query<{ change_pct: string; deposit_man: number }>("select * from renewal_drops(null, null, '2018-01-01', 10)");
+    expect(d.rows.map((x) => [x.deposit_man, Number(x.change_pct)])).toEqual([[45000, -10]]);
+  });
+});
+
+describe("complex_stats", () => {
+  it("가장 많이 거래된 면적 기준 최근 거래·최고가", async () => {
+    const r = await db.query<Record<string, unknown>>("select * from complex_stats(array['R-1'])");
+    expect(r.rows[0]).toMatchObject({ apt_nm: "순위", area_type: "85.0", last_price: 80000, peak_price: 99000 });
+  });
+});
+
 describe("detect_events", () => {
   it("신고가: 직전 36개월 최고가 초과만, 해제 거래는 비교에서 제외, 36개월 이전 고가는 무시", async () => {
     await trade({ date: "2021-06-01", price: 200000 });               // 36개월 이전 → 무시

@@ -1,10 +1,16 @@
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Legend, SupplyChart, type SupplyPoint } from "../_components/Charts";
+import { SupplyJeonse } from "../_components/SupplyJeonse";
 import { Badge, Card, Stat } from "../_components/ui";
-import { formatYm } from "@/lib/format";
-import { getGroups, getSupply } from "@/lib/queries";
+import { DEFAULT_BAND } from "@/lib/area";
+import { formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
+import { getGroups, getSupply, getTrend } from "@/lib/queries";
 import { groupColor } from "@/lib/groups";
-import { addMonths, currentYm, monthsBetween } from "@/lib/range";
+import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm } from "@/lib/range";
+import { REACTION_BEFORE, supplyByGroup, supplyReactions } from "@/lib/supply";
+
+const HISTORY_AHEAD = 24; // 입주·전세 칸: 보관 시작 ~ 향후 2년
+const REACTION_MIN = 500; // 이 세대 이상 입주한 달만 전후 비교
 
 const WINDOWS = [
   { value: "12", label: "과거 1년 ~ 향후 3년", past: 12, future: 36 },
@@ -23,34 +29,50 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
   const now = currentYm();
   const from = addMonths(now, -win.past);
   const to = addMonths(now, win.future);
-  const { projects, manual } = await getSupply(from, to);
+  const histTo = addMonths(now, HISTORY_AHEAD);
+  // 위쪽 차트(선택 기간)와 아래 입주·전세 칸(보관 시작~향후 2년)을 한 번에 받는다
+  const [{ projects: allProjects, manual: allManual }, jeonseRows] = await Promise.all([
+    getSupply([from, DATA_START].sort()[0], [to, histTo].sort()[1]),
+    Promise.all(groups.map((g) => getTrend(g.id, DEFAULT_BAND, DATA_START, now))),
+  ]);
+  const projects = allProjects.filter((p) => p.move_in_ym >= from && p.move_in_ym <= to);
+  const manual = allManual.filter((m) => m.ym >= from && m.ym <= to);
 
-  const regionToGroup = new Map(groups.flatMap((g) => g.regions.map((r) => [r.id, g] as const)));
+  const regionToGroupId = new Map(groups.flatMap((g) => g.regions.map((r) => [r.id, g.id] as const)));
   const shownGroups = groups.filter((g) => groupId == null || g.id === groupId);
   const series = shownGroups.map((g) => ({ key: `g${g.id}`, label: g.name, color: groupColor(groups.indexOf(g)) }));
+  const inScope = (regionId: number) => groupId == null || regionToGroupId.get(regionId) === groupId;
 
-  const inScope = (regionId: number) => groupId == null || regionToGroup.get(regionId)?.id === groupId;
-  const counted = projects.filter((p) => !p.is_excluded && inScope(p.region_id));
-  const manualIn = manual.filter((m) => m.kind === "입주" && inScope(m.region_id));
-
-  const data: SupplyPoint[] = monthsBetween(from, to).map((ym) => {
+  // 위쪽 차트: 선택 기간 월별 그룹 세대
+  const winMonths = monthsBetween(from, to);
+  const winSupply = supplyByGroup(regionToGroupId, winMonths, projects, manual);
+  const data: SupplyPoint[] = winMonths.map((ym, i) => {
     const pt: SupplyPoint = { ym };
-    for (const s of series) pt[s.key] = 0;
+    for (const g of shownGroups) pt[`g${g.id}`] = winSupply.get(g.id)![i];
     return pt;
   });
-  const byYm = new Map(data.map((d) => [d.ym, d]));
-  const add = (ym: string, regionId: number, n: number) => {
-    const g = regionToGroup.get(regionId);
-    const pt = byYm.get(ym);
-    if (g && pt && `g${g.id}` in pt) pt[`g${g.id}`] = Number(pt[`g${g.id}`]) + n;
-  };
-  for (const p of counted) add(p.move_in_ym, p.region_id, p.total_households_override ?? p.households);
-  for (const m of manualIn) add(m.ym, m.region_id, m.households);
-
   const sumBetween = (a: string, b: string) =>
-    data.filter((d) => d.ym >= a && d.ym <= b).reduce((s, d) => s + series.reduce((x, k) => x + Number(d[k.key]), 0), 0);
+    winMonths.reduce((s, m, i) => (m >= a && m <= b ? s + shownGroups.reduce((x, g) => x + winSupply.get(g.id)![i], 0) : s), 0);
   const nextYear = sumBetween(addMonths(now, 1), addMonths(now, 12));
   const yearAfter = sumBetween(addMonths(now, 13), addMonths(now, 24));
+
+  // 입주 전후 전세가
+  const histMonths = monthsBetween(DATA_START, histTo);
+  const supplyHist = supplyByGroup(regionToGroupId, histMonths, allProjects, allManual);
+  const jeonseHist = new Map(groups.map((g, i) => {
+    const byYm = new Map(jeonseRows[i].map((r) => [r.ym, r.jeonse_median]));
+    return [g.id, histMonths.map((m) => byYm.get(m) ?? null)] as const;
+  }));
+  const partialYm = partialFromYm();
+  const histPartial = histMonths.indexOf(partialYm);
+  const reactions = supplyReactions(histMonths, supplyHist, jeonseHist, histMonths.indexOf(lastCompleteYm()), REACTION_MIN)
+    .filter((r) => groupId == null || r.groupId === groupId);
+  const groupName = new Map(groups.map((g) => [g.id, g.name]));
+  const panels = shownGroups.map((g) => ({
+    id: g.id, name: g.name, color: groupColor(groups.indexOf(g)),
+    supply: supplyHist.get(g.id)!, jeonse: jeonseHist.get(g.id)!,
+  }));
+  const offs = (a: readonly [number, number]) => `${Math.abs(a[0])}~${Math.abs(a[1])}`;
 
   const list = projects
     .filter((p) => inScope(p.region_id) && (showExcluded || !p.is_excluded))
@@ -78,6 +100,58 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
           <SupplyChart data={data} series={series} nowYm={now} />
         </Card>
 
+        <section className="mb-4 flex flex-col gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">입주와 전세가</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              지역별 전용 {DEFAULT_BAND}㎡ 전세 중위가(위)와 월별 입주 세대(아래). {REACTION_MIN}세대 이상 입주한 달은 위 칸에 점선으로 표시. 흐린 막대 = 앞으로 입주.
+            </p>
+          </div>
+          <SupplyJeonse months={histMonths} partialFrom={histPartial < 0 ? histMonths.length : histPartial} nowIdx={histMonths.indexOf(now)} panels={panels} />
+          <div className="panel px-4 pb-3 pt-3.5">
+            <h3 className="text-sm font-semibold">대규모 입주 전후 전세 변화</h3>
+            <p className="mb-2 mt-0.5 text-xs text-muted">
+              입주 {offs(REACTION_BEFORE)}개월 전 평균 → 입주 전월~익월 평균. 새 아파트 전세 계약은 입주 1~2개월 전에 몰려서(계약일 기준) 이 구간을 &apos;입주장&apos;으로 봅니다.
+              &apos;지역 흐름 제외&apos;는 같은 기간 다른 4개 지역 평균 변화를 뺀 값입니다.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="mono w-full min-w-[620px] text-[13px]">
+                <thead className="text-xs text-muted">
+                  <tr className="text-right">
+                    <th className="py-1 text-left font-normal">입주월</th>
+                    <th className="text-left font-normal">지역</th>
+                    <th className="font-normal">입주 세대</th>
+                    <th className="font-normal">입주 전</th>
+                    <th className="font-normal">입주장</th>
+                    <th className="font-normal">변화</th>
+                    <th className="font-normal">다른 지역</th>
+                    <th className="font-normal">지역 흐름 제외</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reactions.map((r) => (
+                    <tr key={`${r.groupId}-${r.ym}`} className="border-t border-line text-right">
+                      <td className="py-1.5 text-left">{shortYm(r.ym)}</td>
+                      <td className="text-left font-sans">{groupName.get(r.groupId)}</td>
+                      <td>{r.households.toLocaleString()}</td>
+                      <td className="text-ink-2">{formatEok(r.before)}</td>
+                      <td>{formatEok(r.around)}</td>
+                      <td className={r.change >= 0 ? "text-up" : "text-down"}>{formatPct(r.change)}</td>
+                      <td className="text-ink-2">{formatPct(r.others)}</td>
+                      <td className={`font-medium ${r.excess == null ? "" : r.excess >= 0 ? "text-up" : "text-down"}`}>
+                        {r.excess == null ? "-" : `${r.excess >= 0 ? "+" : ""}${r.excess.toFixed(1)}%p`}
+                      </td>
+                    </tr>
+                  ))}
+                  {reactions.length === 0 && (
+                    <tr><td colSpan={8} className="py-8 text-center text-muted">비교할 수 있는 대규모 입주(한 달 {REACTION_MIN}세대 이상)가 없습니다.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <Card title={`공고 ${list.length}건`}>
           <div className="overflow-x-auto">
             <table className="mono w-full min-w-[640px] text-[13px]">
@@ -97,7 +171,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                     <td className="text-left font-sans">
                       {p.pblanc_url ? <a href={p.pblanc_url} target="_blank" rel="noreferrer" className="hover:underline">{p.house_nm}</a> : p.house_nm}
                     </td>
-                    <td className="text-left font-sans text-ink-2">{regionToGroup.get(p.region_id)?.name}</td>
+                    <td className="text-left font-sans text-ink-2">{groupName.get(regionToGroupId.get(p.region_id)!)}</td>
                     <td>{(p.total_households_override ?? p.households).toLocaleString()}</td>
                     <td className="text-left">
                       <span className="inline-flex flex-wrap gap-1 pl-3">

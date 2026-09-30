@@ -46,7 +46,7 @@ export interface EventRow {
   is_direct: boolean;
   detected_at: string;
   invalidated_at: string | null;
-  apt_trades: { floor: number | null } | null;
+  apt_trades: { floor: number | null; rgst_date: string | null; is_cancelled: boolean } | null;
   complexes: { apt_nm: string; umd_nm: string | null; regions: { group_id: number; sigungu_name: string } };
 }
 
@@ -64,7 +64,7 @@ export async function getEvents(f: {
     .from("events")
     .select(
       "id, type, apt_seq, area_type, deal_date, price_man, ref_price_man, ref_sample_count, change_pct, is_direct, detected_at, invalidated_at," +
-        " apt_trades(floor), complexes!inner(apt_nm, umd_nm, regions!inner(group_id, sigungu_name))",
+        " apt_trades(floor, rgst_date, is_cancelled), complexes!inner(apt_nm, umd_nm, regions!inner(group_id, sigungu_name))",
     )
     .gte("deal_date", f.since)
     .gte("ref_sample_count", f.minSamples)
@@ -144,11 +144,13 @@ export interface ComplexTrade {
   deal_date: string;
   price_man: number;
   area_type: number;
+  area_band: number | null; // DB 면적 구간(원래 전용면적 기준) — 추이·순위와 같은 기준
   floor: number | null;
   apt_dong: string | null;
   is_direct: boolean;
   is_cancelled: boolean;
   missing_since: string | null;
+  rgst_date: string | null;
   events: { type: "NEW_HIGH" | "DROP"; change_pct: number; invalidated_at: string | null }[];
 }
 
@@ -159,6 +161,7 @@ export interface ComplexRent {
   monthly_rent_man: number;
   rent_type: "전세" | "월세";
   area_type: number;
+  area_band: number | null;
   floor: number | null;
   contract_type: string | null;
   use_rr_right: boolean | null;
@@ -179,7 +182,7 @@ export async function getComplexTrades(aptSeq: string, from: string, to: string)
     (a, b) =>
       db()
         .from("apt_trades")
-        .select("id, deal_date, price_man, area_type, floor, apt_dong, is_direct, is_cancelled, missing_since, events(type, change_pct, invalidated_at)")
+        .select("id, deal_date, price_man, area_type, area_band, floor, apt_dong, is_direct, is_cancelled, missing_since, rgst_date, events(type, change_pct, invalidated_at)")
         .eq("apt_seq", aptSeq)
         .gte("deal_ymd", from)
         .lte("deal_ymd", to)
@@ -195,7 +198,7 @@ export async function getComplexRents(aptSeq: string, from: string, to: string):
     (a, b) =>
       db()
         .from("apt_rents")
-        .select("id, deal_date, deposit_man, monthly_rent_man, rent_type, area_type, floor, contract_type, use_rr_right")
+        .select("id, deal_date, deposit_man, monthly_rent_man, rent_type, area_type, area_band, floor, contract_type, use_rr_right")
         .eq("apt_seq", aptSeq)
         .is("missing_since", null)
         .gte("deal_ymd", from)
@@ -205,6 +208,116 @@ export async function getComplexRents(aptSeq: string, from: string, to: string):
         .range(a, b),
     "apt_rents",
   );
+}
+
+/** 여러 단지 기본 정보 (단지 비교용) */
+export async function getComplexes(aptSeqs: string[]): Promise<Complex[]> {
+  if (aptSeqs.length === 0) return [];
+  const res = await db()
+    .from("complexes")
+    .select("apt_seq, apt_nm, umd_nm, jibun, road_nm, build_year, regions(sigungu_name, group_id)")
+    .in("apt_seq", aptSeqs);
+  return check(res, "complexes") as unknown as Complex[];
+}
+
+export interface ComplexStats {
+  apt_seq: string;
+  apt_nm: string;
+  umd_nm: string | null;
+  sigungu_name: string;
+  build_year: number | null;
+  area_type: number | null;
+  trades_12m: number | null;
+  last_date: string | null;
+  last_price: number | null;
+  trade_median_6m: number | null;
+  trade_count_6m: number | null;
+  jeonse_median_6m: number | null;
+  jeonse_count_6m: number | null;
+  peak_price: number | null;
+  peak_date: string | null;
+  event_type: "NEW_HIGH" | "DROP" | null;
+  event_date: string | null;
+  event_pct: number | null;
+}
+
+/** 관심 단지 요약: 단지마다 최근 2년 거래가 가장 많은 전용면적 기준 */
+export async function getComplexStats(aptSeqs: string[]): Promise<ComplexStats[]> {
+  if (aptSeqs.length === 0) return [];
+  const res = await db().rpc("complex_stats", { p_apt_seqs: aptSeqs });
+  return check(res, "complex_stats") as ComplexStats[];
+}
+
+// ---------- 단지 순위 ----------
+
+export interface RankRow {
+  apt_seq: string;
+  apt_nm: string;
+  umd_nm: string | null;
+  sigungu_name: string;
+  build_year: number | null;
+  trades_12m: number;
+  median_12m: number;
+  ppa_12m: number; // 3.3㎡당 만원
+  recent_median: number | null;
+  recent_count: number;
+  year_ago_median: number | null;
+  year_ago_count: number;
+  peak_price: number;
+  peak_date: string;
+}
+
+export async function getRank(groupId: number | null, band: number | null, end: string): Promise<RankRow[]> {
+  const res = await db().rpc("complex_rank", { p_group_id: groupId, p_area_band: band, p_end: end });
+  return check(res, "complex_rank") as RankRow[];
+}
+
+// ---------- 전세 갱신 ----------
+
+export interface RenewalRow {
+  ym: string;
+  new_count: number;
+  renew_count: number;
+  rr_count: number;
+  jeonse_renew_count: number;
+  change_median: number | null; // %, 전세→전세 갱신 전체
+  down_count: number;
+  up_count: number;
+  free_count: number; // 갱신요구권 없이 합의한 전세 갱신
+  free_change_median: number | null;
+  rr_jeonse_count: number; // 갱신요구권 쓴 전세 갱신 (인상 상한 5%)
+  rr_change_median: number | null;
+}
+
+export async function getRenewal(groupId: number | null, band: number | null, from: string, to: string): Promise<RenewalRow[]> {
+  const res = await db().rpc("renewal_monthly", { p_group_id: groupId, p_area_band: band, p_from: from, p_to: to });
+  const num = (v: unknown) => (v == null ? null : Number(v)); // numeric은 문자열로 온다
+  return (check(res, "renewal_monthly") as RenewalRow[]).map((r) => ({
+    ...r,
+    change_median: num(r.change_median),
+    free_change_median: num(r.free_change_median),
+    rr_change_median: num(r.rr_change_median),
+  }));
+}
+
+export interface RenewalDrop {
+  id: number;
+  apt_seq: string;
+  apt_nm: string;
+  umd_nm: string | null;
+  sigungu_name: string;
+  area_type: number;
+  floor: number | null;
+  deal_date: string;
+  deposit_man: number;
+  pre_deposit_man: number;
+  change_pct: number;
+  use_rr_right: boolean | null;
+}
+
+export async function getRenewalDrops(groupId: number | null, band: number | null, since: string, limit = 50): Promise<RenewalDrop[]> {
+  const res = await db().rpc("renewal_drops", { p_group_id: groupId, p_area_band: band, p_since: since, p_limit: limit });
+  return check(res, "renewal_drops") as RenewalDrop[];
 }
 
 // ---------- 입주 물량 ----------

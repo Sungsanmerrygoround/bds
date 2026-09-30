@@ -9,6 +9,9 @@ export const RANGE_PRESETS = [
 ] as const;
 export const DEFAULT_RANGE = "3y";
 
+/** 보관 중인 실거래 첫 달 (5년치) */
+export const DATA_START = "202110";
+
 export interface MonthRange {
   from: string;
   to: string;
@@ -20,6 +23,11 @@ export interface MonthRange {
 export function currentYm(now = new Date()): string {
   const kst = new Date(now.getTime() + 9 * 3600_000);
   return `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** KST 기준 오늘 YYYY-MM-DD */
+export function todayKst(now = new Date()): string {
+  return new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
 export function addMonths(ym: string, n: number): string {

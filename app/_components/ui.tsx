@@ -38,8 +38,8 @@ export function Stat({ label, value, unit, sub, subTone, children }: {
   );
 }
 
-export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "up" | "down" | "neutral" }) {
-  const cls = tone === "up" ? "text-up border-up/40" : tone === "down" ? "text-down border-down/40" : "text-ink-2 border-line";
+export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "up" | "down" | "warn" | "neutral" }) {
+  const cls = { up: "text-up border-up/40", down: "text-down border-down/40", warn: "text-warn border-warn/40", neutral: "text-ink-2 border-line" }[tone];
   return <span className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 font-sans text-xs ${cls}`}>{children}</span>;
 }
 
