@@ -2,8 +2,8 @@ import Link from "next/link";
 import { FavButton } from "../_components/FavButton";
 import { Badge } from "../_components/ui";
 import { getFavorites } from "@/lib/favorites";
-import { formatEok, formatPct } from "@/lib/format";
-import { getComplexStats, type ComplexStats } from "@/lib/queries";
+import { formatEok, formatHouseholds, formatPct } from "@/lib/format";
+import { getComplexInfo, getComplexStats, type ComplexStats } from "@/lib/queries";
 
 // 관심 단지: 이 브라우저에 저장한 단지들의 최근 흐름을 한 화면에.
 // 단지마다 최근 2년 매매가 가장 많은 전용면적 하나를 기준으로 요약한다.
@@ -33,7 +33,8 @@ function EventBadge({ s }: { s: ComplexStats }) {
 
 export default async function WatchPage() {
   const favs = await getFavorites();
-  const stats = await getComplexStats(favs);
+  const [stats, infos] = await Promise.all([getComplexStats(favs), getComplexInfo(favs)]);
+  const hhOf = (s: ComplexStats) => infos.get(s.apt_seq)?.households ?? null;
   const order = new Map(favs.map((s, i) => [s, i]));
   const rows = stats.sort((a, b) => order.get(a.apt_seq)! - order.get(b.apt_seq)!);
   const compareHref = `/complex/compare?ids=${rows.slice(0, COMPARE_MAX).map((r) => encodeURIComponent(r.apt_seq)).join(",")}`;
@@ -76,7 +77,7 @@ export default async function WatchPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <Link href={href(s)} className="font-semibold hover:underline">{s.apt_nm}</Link>
-                      <div className="text-xs text-muted">{s.sigungu_name} {s.umd_nm} · {s.build_year ?? "-"}년 · {s.area_type ?? "-"}㎡</div>
+                      <div className="text-xs text-muted">{s.sigungu_name} {s.umd_nm} · {s.build_year ?? "-"}년{hhOf(s) != null && ` · ${formatHouseholds(hhOf(s))}`} · {s.area_type ?? "-"}㎡</div>
                     </div>
                     <FavButton aptSeq={s.apt_seq} on name={s.apt_nm} size="lg" />
                   </div>
@@ -96,10 +97,11 @@ export default async function WatchPage() {
 
           {/* 넓은 화면: 표 */}
           <div className="panel hidden overflow-x-auto sm:block">
-            <table className="mono w-full min-w-[900px] text-[13px]">
+            <table className="mono w-full min-w-[980px] text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
                   <th className="px-3 py-2 text-left font-normal">단지</th>
+                  <th className="px-2 font-normal">세대수</th>
                   <th className="px-2 font-normal">기준 면적</th>
                   <th className="px-2 font-normal">최근 거래</th>
                   <th className="px-2 font-normal">매매 중위</th>
@@ -123,6 +125,7 @@ export default async function WatchPage() {
                           </span>
                         </span>
                       </td>
+                      <td className="px-2 text-ink-2">{hhOf(s)?.toLocaleString("ko-KR") ?? "-"}</td>
                       <td className="px-2">{s.area_type ?? "-"}㎡</td>
                       <td className="px-2">
                         <div className="font-medium">{formatEok(s.last_price)}</div>

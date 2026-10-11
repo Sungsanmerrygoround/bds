@@ -1,6 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { seriesPaths, spreadLabels } from "@/lib/chart";
 
 // 직접 그리는 SVG 시계열 차트(추이·지역 비교)가 함께 쓰는 부품
 
@@ -129,5 +130,79 @@ export function XAxis({ ts, w, h, months, layout, height = 26 }: {
         font={layout.font}
       />
     </svg>
+  );
+}
+
+/** 선택한 시점의 값 줄 (월·주 이름 + 계열별 값) */
+export const readoutRow = "mono flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2";
+
+/** 차트 제목 줄: 제목 + 단위(작게) + 오른쪽 내용(주석·범례 등) */
+export function ChartTitle({ title, unit, right }: { title: ReactNode; unit?: ReactNode; right?: ReactNode }) {
+  return (
+    <div className={`${chartPad} flex flex-wrap items-center justify-between gap-2`}>
+      <h2 className="text-sm font-semibold">
+        {title}
+        {unit != null && <> <span className="mono text-xs font-normal text-muted">{unit}</span></>}
+      </h2>
+      {right}
+    </div>
+  );
+}
+
+/** 가로 격자선 (점선) */
+export function GridLines({ ticks, y, x0, x1 }: { ticks: number[]; y: (v: number) => number; x0: number; x1: number }) {
+  return <>{ticks.map((v) => <path key={v} d={`M${x0} ${fx(y(v))} H${x1}`} stroke="var(--grid)" strokeDasharray="2 4" />)}</>;
+}
+
+/** 선택한 시점의 세로선 */
+export function Crosshair({ x, height }: { x: number; height: number }) {
+  return <path d={`M${fx(x)} 0 V${height}`} stroke="#6b7280" />;
+}
+
+/** 선택한 시점의 계열 점 */
+export function HoverDot({ x, y, color, r = 4, ring = 2.5 }: { x: number; y: number; color: string; r?: number; ring?: number }) {
+  return <circle cx={x} cy={y} r={r} fill={color} stroke="var(--surface)" strokeWidth={ring} />;
+}
+
+/** 선 계열: 확정 구간은 실선, partial 인덱스부터(집계 중) 점선 */
+export function SeriesLine({ values, x, y, base, partial, color, width = 2 }: {
+  values: (number | null)[];
+  x: (i: number) => number;
+  y: (v: number) => number;
+  base: number;
+  partial: number;
+  color: string;
+  width?: number;
+}) {
+  const p = seriesPaths(values, x, y, base, partial);
+  return (
+    <g>
+      <path d={p.solid} fill="none" stroke={color} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={p.dashed} fill="none" stroke={color} strokeWidth={width} strokeDasharray="3 4" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/**
+ * 오른쪽 축: 계열별 값 태그(겹치지 않게 벌림) + 눈금 라벨.
+ * 넓은 화면에서는 태그와 14px 안으로 겹치는 눈금 라벨을 숨기고, 좁은 화면은 맨 아래 눈금을 뺀다(라벨이 왼쪽 안쪽이라).
+ */
+export function AxisTags({ items, y, height, ticks, fmtTick, fmtTag, w, layout }: {
+  items: { key: string | number; value: number; color: string }[];
+  y: (v: number) => number;
+  height: number;
+  ticks: number[];
+  fmtTick: (v: number) => string;
+  fmtTag: (v: number) => string;
+  w: number;
+  layout: ReturnType<typeof axisLayout>;
+}) {
+  const ys = spreadLabels(items.map((t) => y(t.value)), layout.font + 11, 10, height - 10);
+  const visible = ticks.slice(layout.compact ? 1 : 0).filter((v) => layout.compact || ys.every((ty) => Math.abs(ty - y(v)) >= 14));
+  return (
+    <>
+      {visible.map((v) => <YLabel key={v} y={y(v)} text={fmtTick(v)} w={w} layout={layout} />)}
+      {items.map((t, k) => <Tag key={t.key} x={w - layout.R0 + 4} y={ys[k]} text={fmtTag(t.value)} bg={t.color} fg="var(--page)" font={layout.font} />)}
+    </>
   );
 }

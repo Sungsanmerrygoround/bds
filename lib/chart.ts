@@ -87,6 +87,12 @@ export function seriesPaths(
   return { solid: solid.trim(), dashed: dashed.trim(), area: area.trim() };
 }
 
+/** 세로 위치: 눈금 범위 [ticks[0], ticks.at(-1)]를 위 여백 top, 아래 여백 bottom을 뺀 높이에 맞춘다 */
+export function linearY(ticks: number[], top: number, height: number, bottom: number): (v: number) => number {
+  const lo = ticks[0], hi = ticks[ticks.length - 1];
+  return (v: number) => top + (height - top - bottom) * (1 - (v - lo) / (hi - lo));
+}
+
 /** 보기 좋은 눈금 (1·2·5 × 10^n 간격) */
 export function niceTicks(min: number, max: number, count = 5): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max)) return [];
@@ -131,4 +137,38 @@ export function barPath(x: number, w: number, top: number, base: number, radius 
   if (base - top < 0.5) return "";
   const r = Math.min(radius, w / 2, (base - top) / 2);
   return `M${f(x)} ${f(base)} V${f(top + r)} Q${f(x)} ${f(top)} ${f(x + r)} ${f(top)} H${f(x + w - r)} Q${f(x + w)} ${f(top)} ${f(x + w)} ${f(top + r)} V${f(base)} Z `;
+}
+
+/**
+ * 주 단위 시간축 (주간 지수). weeks = 월요일 날짜(YYYY-MM-DD) 오름차순.
+ * 눈금은 각 달의 첫 주에, 1·3·6·12개월 중 라벨 간격이 44px 이상인 간격으로.
+ * jans/yearLabels는 chartKit의 YearMarks가 그대로 쓴다.
+ */
+export function weekScale(weeks: string[], w: number, L0: number, R0: number) {
+  const n = weeks.length;
+  const IW = Math.max(1, w - L0 - R0);
+  const X = (i: number) => (n === 1 ? L0 + IW / 2 : L0 + (IW * i) / (n - 1));
+  const slot = n > 1 ? IW / (n - 1) : IW;
+  const month = (i: number) => Number(weeks[i].slice(5, 7));
+  // 달이 바뀐 첫 주 (첫 주는 이전 주가 없으니 제외: 달 중간에서 시작할 수 있다)
+  const firsts = weeks.map((_, i) => i).filter((i) => i > 0 && month(i) !== month(i - 1));
+  const every = [1, 3, 6, 12].find((m) => slot * 4.35 * m >= 44) ?? 12;
+  const xTicks = firsts
+    .filter((i) => (month(i) - 1) % every === 0)
+    .map((i) => ({ i, label: every >= 6 ? `${weeks[i].slice(2, 4)}.${weeks[i].slice(5, 7)}` : `${month(i)}월` }));
+  const jans = firsts.filter((i) => month(i) === 1);
+  const yearLabels = [...(jans.length === 0 || X(jans[0]) - X(0) >= 48 ? [0] : []), ...jans].map((i) => ({ i, label: weeks[i].slice(0, 4) }));
+  return { n, X, slot, xTicks, jans, yearLabels };
+}
+
+/** 직전 값 대비 변동률(%). 앞 값이 없으면 null */
+export function changePct(values: (number | null)[], i: number, back = 1): number | null {
+  const a = values[i], b = values[i - back];
+  return a == null || b == null || i - back < 0 || b === 0 ? null : (a / b - 1) * 100;
+}
+
+/** 첫 값 = 100 으로 다시 맞춘 지수 (기간 시작 대비 상대 변화) */
+export function rebase(values: (number | null)[]): (number | null)[] {
+  const base = values.find((v): v is number => v != null);
+  return values.map((v) => (v == null || !base ? null : (v / base) * 100));
 }

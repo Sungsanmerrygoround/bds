@@ -1,17 +1,18 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "./_components/Filters";
 import { PeakTable } from "./_components/PeakTable";
+import { RateChart } from "./_components/RateChart";
+import { WeeklyIndexPanel } from "./_components/WeeklyIndexPanel";
 import { TrendTerminal, type TermPoint } from "./_components/TrendTerminal";
 import { Spark, SparkBars, Stat } from "./_components/ui";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
-import { formatEok, formatYm, shortYm } from "@/lib/format";
+import { deltaTone, formatDelta, formatEok, formatYm, shortYm } from "@/lib/format";
+import { findGroup } from "@/lib/params";
 import { getGroups, getTrend } from "@/lib/queries";
 import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
 import { peakRecovery } from "@/lib/stats";
 
 const ratioOf = (d?: TermPoint) => (d?.trade && d.jeonse ? (d.jeonse / d.trade) * 100 : null);
 const pct = (a?: number | null, b?: number | null) => (a && b ? (a / b - 1) * 100 : null);
-const delta = (v: number | null, unit = "%") => (v == null ? null : `${v >= 0 ? "▲ +" : "▼ −"}${Math.abs(v).toFixed(1)}${unit}`);
-const tone = (v: number | null) => (v == null ? "muted" : v >= 0 ? "up" : "down") as "up" | "down" | "muted";
 const toneCls = { up: "text-up", down: "text-down", muted: "text-muted" } as const;
 
 export default async function TrendPage({ searchParams }: PageProps<"/">) {
@@ -19,7 +20,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const range = resolveRange(sp);
   const band = parseBand(sp.band);
   const groups = await getGroups();
-  const group = groups.find((g) => String(g.id) === sp.g) ?? groups[0];
+  const group = findGroup(groups, sp.g) ?? groups[0];
 
   const now = currentYm();
   const partialFrom = partialFromYm();
@@ -98,9 +99,9 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
                     <div className="mono text-[40px] font-semibold leading-none">
                       {(latest.trade! / 10000).toFixed(2)}<span className="text-lg text-ink-2">억</span>
                     </div>
-                    {delta(tp) && (
-                      <div className={`mono mt-1.5 text-xs ${toneCls[tone(tp)]}`}>
-                        {delta(tp)} <span className="text-muted">1년 전 {formatEok(yearAgo?.trade)}</span>
+                    {formatDelta(tp) && (
+                      <div className={`mono mt-1.5 text-xs ${toneCls[deltaTone(tp)]}`}>
+                        {formatDelta(tp)} <span className="text-muted">1년 전 {formatEok(yearAgo?.trade)}</span>
                       </div>
                     )}
                   </div>
@@ -109,23 +110,23 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <MiniStat label="전세 중위" value={latest.jeonse ? (latest.jeonse / 10000).toFixed(2) : "-"} unit={latest.jeonse ? "억" : ""} sub={delta(jp)} tone={tone(jp)} />
-                  <MiniStat label="전세가율" value={rNow == null ? "-" : String(Math.round(rNow))} unit={rNow == null ? "" : "%"} sub={delta(rd, "%p")} tone={tone(rd)} />
+                  <MiniStat label="전세 중위" value={latest.jeonse ? (latest.jeonse / 10000).toFixed(2) : "-"} unit={latest.jeonse ? "억" : ""} sub={formatDelta(jp)} tone={deltaTone(jp)} />
+                  <MiniStat label="전세가율" value={rNow == null ? "-" : String(Math.round(rNow))} unit={rNow == null ? "" : "%"} sub={formatDelta(rd, "%p")} tone={deltaTone(rd)} />
                   <MiniStat label="거래 매매/전세" value={String(latest.tradeCount)} unit={`/${latest.jeonseCount}`} sub={`평균 ${avg("tradeCount")}/${avg("jeonseCount")}`} tone="muted" />
                 </div>
               </section>
 
               <div className="hidden grid-cols-2 gap-3 sm:grid xl:grid-cols-4">
                 <Stat label={`매매 중위 · ${shortYm(latest.ym)}`} value={(latest.trade! / 10000).toFixed(2)} unit="억"
-                  sub={delta(tp) && <>{delta(tp)} <span className="text-muted">1년 전 대비</span></>} subTone={tone(tp)}>
+                  sub={formatDelta(tp) && <>{formatDelta(tp)} <span className="text-muted">1년 전 대비</span></>} subTone={deltaTone(tp)}>
                   <Spark values={last12.map((d) => d.trade)} color="var(--series-1)" gradient="grad-s1" partial={partialIn12} />
                 </Stat>
                 <Stat label={`전세 중위 · ${shortYm(latest.ym)}`} value={latest.jeonse ? (latest.jeonse / 10000).toFixed(2) : "-"} unit={latest.jeonse ? "억" : undefined}
-                  sub={delta(jp) && <>{delta(jp)} <span className="text-muted">1년 전 대비</span></>} subTone={tone(jp)}>
+                  sub={formatDelta(jp) && <>{formatDelta(jp)} <span className="text-muted">1년 전 대비</span></>} subTone={deltaTone(jp)}>
                   <Spark values={last12.map((d) => d.jeonse)} color="var(--series-2)" gradient="grad-s2" partial={partialIn12} />
                 </Stat>
                 <Stat label={`전세가율 · ${shortYm(latest.ym)}`} value={rNow == null ? "-" : String(Math.round(rNow))} unit={rNow == null ? undefined : "%"}
-                  sub={delta(rd, "%p") && <>{delta(rd, "%p")} <span className="text-muted">1년 전 대비</span></>} subTone={tone(rd)}>
+                  sub={formatDelta(rd, "%p") && <>{formatDelta(rd, "%p")} <span className="text-muted">1년 전 대비</span></>} subTone={deltaTone(rd)}>
                   <Spark values={last12.map(ratioOf)} color="var(--series-3)" gradient="grad-s3" partial={partialIn12} />
                 </Stat>
                 <Stat label={`거래 매매 / 전세 · ${shortYm(latest.ym)}`} value={String(latest.tradeCount)} unit={` / ${latest.jeonseCount}`}
@@ -146,6 +147,9 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
             <PeakTable title={`전고점 대비 · ${group.name} · ${bandText(band)}`} rows={peaks}
               note={`${shortYm(DATA_START)} 이후 월별 중위가의 3개월 이동평균 기준`} />
           )}
+
+          <WeeklyIndexPanel group={group} from={range.from} to={range.to} />
+          <RateChart months={chart.map((d) => d.ym)} />
 
           <details className="panel px-4 py-3 text-sm">
             <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">표로 보기</summary>

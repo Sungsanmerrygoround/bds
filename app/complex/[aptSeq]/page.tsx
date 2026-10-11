@@ -5,8 +5,8 @@ import { DealScatter, Legend, type DealDot } from "../../_components/Charts";
 import { FavButton } from "../../_components/FavButton";
 import { Badge, Card, Stat } from "../../_components/ui";
 import { getFavorites } from "@/lib/favorites";
-import { formatEok, formatPct } from "@/lib/format";
-import { getComplex, getComplexRents, getComplexTrades } from "@/lib/queries";
+import { complexFacts, formatEok, formatPct } from "@/lib/format";
+import { getComplex, getComplexInfo, getComplexRents, getComplexTrades } from "@/lib/queries";
 import { currentYm, rangeLabel, resolveRange, todayKst } from "@/lib/range";
 import { isUnregistered, median, UNREGISTERED_DAYS } from "@/lib/stats";
 
@@ -19,13 +19,15 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
   const sp = await searchParams;
   const range = resolveRange(sp);
 
-  const [complex, trades, rents, favs] = await Promise.all([
+  const [complex, trades, rents, favs, infos] = await Promise.all([
     getComplex(aptSeq),
     getComplexTrades(aptSeq, range.from, range.to),
     getComplexRents(aptSeq, range.from, range.to),
     getFavorites(),
+    getComplexInfo([aptSeq]),
   ]);
   if (!complex) notFound();
+  const info = infos.get(aptSeq);
 
   // 면적 타입: 기간 내 거래 수 많은 순. 기본값은 매매가 가장 많은 타입.
   const counts = new Map<number, number>();
@@ -78,11 +80,17 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
           다른 단지와 비교
         </Link>
       </div>
-      <p className="mb-4 text-sm text-ink-2">
+      <p className={`text-sm text-ink-2 ${info ? "" : "mb-4"}`}>
         {complex.regions.sigungu_name} {complex.umd_nm} {complex.jibun}
         {complex.road_nm && ` · ${complex.road_nm}`}
         {complex.build_year && ` · ${complex.build_year}년 준공`}
       </p>
+      {info && (
+        <p className="mb-4 mt-0.5 text-sm text-ink-2" data-testid="complex-facts">
+          {complexFacts(info).join(" · ")}
+          <span className="ml-1.5 text-xs text-muted">K-apt{info.kapt_name && info.kapt_name !== complex.apt_nm ? ` ‘${info.kapt_name}’` : ""}</span>
+        </p>
+      )}
 
       <RailLayout
         summary={[area == null ? "전체 면적" : `${area}㎡`, rangeLabel(range)]}

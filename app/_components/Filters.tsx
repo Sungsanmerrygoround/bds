@@ -289,4 +289,4 @@ export function ParamToggle({ label, param, checked }: { label: string; param: s
   );
 }
 
-export const inputCls = "min-h-10 rounded border border-line bg-surface-2 px-2.5 text-sm text-ink";
+const inputCls = "min-h-10 rounded border border-line bg-surface-2 px-2.5 text-sm text-ink";

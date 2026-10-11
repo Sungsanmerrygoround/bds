@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { niceTicks, seriesPaths, spreadLabels, toIndex } from "@/lib/chart";
+import { linearY, niceTicks, toIndex } from "@/lib/chart";
 import { longYm } from "@/lib/format";
-import { axisLayout, chartPad, chartPanel, fx, pointerSelect, Swatch, Tag, timeScale, useWidth, XAxis, YearMarks, YLabel } from "./chartKit";
+import {
+  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, pointerSelect, SeriesLine, Swatch,
+  timeScale, useWidth, XAxis, YearMarks,
+} from "./chartKit";
 
 // 비교 차트: 대상(지역 또는 단지)별 가격 선 차트 + 월별 거래량 선 차트.
 // 두 차트는 같은 시간축과 크로스헤어를 공유하고, 범례로 대상을 켜고 끈다.
@@ -58,7 +61,7 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
     });
 
   const layout = axisLayout(w);
-  const { L0, R0, font } = layout;
+  const { L0, R0 } = layout;
   const ts = timeScale(months, w, L0, R0);
   const { X } = ts;
   const pointer = pointerSelect(setHover, L0, ts.slot, n);
@@ -66,41 +69,21 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
 
   const pAll = shown.flatMap((s) => vals.get(s.id)!).filter((v): v is number => v != null);
   const pt = pAll.length ? niceTicks(Math.min(...pAll), Math.max(...pAll), 5) : [0, 1];
-  const py = (v: number) => PT + (PH - PT - PB) * (1 - (v - pt[0]) / (pt[pt.length - 1] - pt[0]));
+  const py = linearY(pt, PT, PH, PB);
 
   const ct = niceTicks(0, Math.max(1, ...shown.flatMap((s) => s.count)), 4);
-  const cy = (v: number) => VT + (VH - VT - VB) * (1 - v / ct[ct.length - 1]);
+  const cy = linearY(ct, VT, VH, VB); // 거래량 눈금은 0부터
 
-  const grid = (ticks: number[], y: (v: number) => number) =>
-    ticks.map((v) => <path key={v} d={`M${L0} ${fx(y(v))} H${w - R0}`} stroke="var(--grid)" strokeDasharray="2 4" />);
-
-  // 오른쪽 축 태그: 지역별로 집계가 끝난 최근 달의 값 (집계 중인 달은 덜 잡혀서 쓰지 않음).
-  // 태그끼리 겹치지 않게 벌리고, 넓은 화면에서는 태그와 겹치는 눈금 라벨을 숨긴다.
-  const axisLabels = (
-    valueAt: (s: CompareSeries) => (number | null)[],
-    y: (v: number) => number,
-    height: number,
-    ticks: number[],
-    fmtTick: (v: number) => string,
-    fmtTag: (v: number) => string,
-  ) => {
-    const items = shown
+  // 오른쪽 축 태그: 대상별로 집계가 끝난 최근 달의 값 (집계 중인 달은 덜 잡혀서 쓰지 않음, 그런 달뿐이면 마지막 값)
+  const tagsOf = (valueAt: (s: CompareSeries) => (number | null)[]) =>
+    shown
       .map((s) => {
         const v = valueAt(s);
         const done = v.slice(0, lastDone + 1).findLastIndex((x) => x != null);
         const i = done >= 0 ? done : v.findLastIndex((x) => x != null);
-        return i < 0 ? null : { s, v: v[i]! };
+        return i < 0 ? null : { key: s.id, value: v[i]!, color: s.color };
       })
-      .filter((x): x is { s: CompareSeries; v: number } => x != null);
-    const ys = spreadLabels(items.map((t) => y(t.v)), font + 11, 10, height - 10);
-    const visible = ticks.slice(layout.compact ? 1 : 0).filter((v) => layout.compact || ys.every((ty) => Math.abs(ty - y(v)) >= 14));
-    return (
-      <>
-        {visible.map((v) => <YLabel key={v} y={y(v)} text={fmtTick(v)} w={w} layout={layout} />)}
-        {items.map((t, k) => <Tag key={t.s.id} x={w - R0 + 4} y={ys[k]} text={fmtTag(t.v)} bg={t.s.color} fg="var(--page)" font={font} />)}
-      </>
-    );
-  };
+      .filter((x) => x != null);
 
   const monthLabel = (
     <span className="font-semibold text-ink">
@@ -122,13 +105,8 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
   return (
     <>
       <section className={chartPanel}>
-        <div className={`${chartPad} flex flex-wrap items-center justify-between gap-2`}>
-          <h2 className="text-sm font-semibold">
-            {labels.price}{" "}
-            <span className="mono text-xs font-normal text-muted">{mode === "price" ? "억 원" : "지수 · 기간 첫 3개월 평균 = 100"}</span>
-          </h2>
-          <span className="mono text-[11px] text-muted">점선 = 신고 기한(30일) 안이라 집계 중</span>
-        </div>
+        <ChartTitle title={labels.price} unit={mode === "price" ? "억 원" : "지수 · 기간 첫 3개월 평균 = 100"}
+          right={<span className="mono text-[11px] text-muted">점선 = 신고 기한(30일) 안이라 집계 중</span>} />
 
         <div role="group" aria-label={`표시할 ${labels.noun}`} className={`${chartPad} flex gap-1.5 overflow-x-auto sm:flex-wrap`}>
           {series.map((s) => {
@@ -154,16 +132,17 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
           {w > 0 && (
             <>
               <svg width={w} height={PH} className="block" role="img" aria-label={`${labels.price} 비교 차트`} {...pointer}>
-                {grid(pt, py)}
+                <GridLines ticks={pt} y={py} x0={L0} x1={w - R0} />
                 <YearMarks ts={ts} height={PH} />
                 {mode === "index" && <path d={`M${L0} ${fx(py(100))} H${w - R0}`} stroke="var(--muted)" strokeDasharray="4 3" />}
-                {shown.map((s) => <Line key={s.id} values={vals.get(s.id)!} x={X} y={py} base={PH} partial={partialFrom} color={s.color} />)}
-                <path d={`M${fx(hx)} 0 V${PH}`} stroke="#6b7280" />
+                {shown.map((s) => <SeriesLine key={s.id} values={vals.get(s.id)!} x={X} y={py} base={PH} partial={partialFrom} color={s.color} />)}
+                <Crosshair x={hx} height={PH} />
                 {shown.map((s) => {
                   const v = vals.get(s.id)![h];
-                  return v == null ? null : <circle key={s.id} cx={hx} cy={py(v)} r={4} fill={s.color} stroke="var(--surface)" strokeWidth={2.5} />;
+                  return v == null ? null : <HoverDot key={s.id} x={hx} y={py(v)} color={s.color} />;
                 })}
-                {axisLabels((s) => vals.get(s.id)!, py, PH, pt, (v) => (mode === "price" ? `${v}억` : String(v)), tagFmt)}
+                <AxisTags items={tagsOf((s) => vals.get(s.id)!)} y={py} height={PH} ticks={pt}
+                  fmtTick={(v) => (mode === "price" ? `${v}억` : String(v))} fmtTag={tagFmt} w={w} layout={layout} />
               </svg>
               <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
             </>
@@ -172,22 +151,18 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
       </section>
 
       <section className={chartPanel}>
-        <div className={`${chartPad} flex flex-wrap items-center justify-between gap-2`}>
-          <h2 className="text-sm font-semibold">
-            {labels.count} <span className="mono text-xs font-normal text-muted">건</span>
-          </h2>
-        </div>
+        <ChartTitle title={labels.count} unit="건" />
         {readout((s) => String(s.count[h]), <>합계 <span className="text-ink">{shown.reduce((sum, s) => sum + s.count[h], 0)}</span></>)}
         <div className="w-full select-none" style={{ minHeight: VH + XH }}>
           {w > 0 && (
             <>
               <svg width={w} height={VH} className="block" role="img" aria-label={`${labels.count} 비교 차트`} {...pointer}>
-                {grid(ct, cy)}
+                <GridLines ticks={ct} y={cy} x0={L0} x1={w - R0} />
                 <YearMarks ts={ts} height={VH} labels={false} />
-                {shown.map((s) => <Line key={s.id} values={s.count} x={X} y={cy} base={VH} partial={partialFrom} color={s.color} width={1.75} />)}
-                <path d={`M${fx(hx)} 0 V${VH}`} stroke="#6b7280" />
-                {shown.map((s) => <circle key={s.id} cx={hx} cy={cy(s.count[h])} r={3.5} fill={s.color} stroke="var(--surface)" strokeWidth={2} />)}
-                {axisLabels((s) => s.count, cy, VH, ct, String, String)}
+                {shown.map((s) => <SeriesLine key={s.id} values={s.count} x={X} y={cy} base={VH} partial={partialFrom} color={s.color} width={1.75} />)}
+                <Crosshair x={hx} height={VH} />
+                {shown.map((s) => <HoverDot key={s.id} x={hx} y={cy(s.count[h])} color={s.color} r={3.5} ring={2} />)}
+                <AxisTags items={tagsOf((s) => s.count)} y={cy} height={VH} ticks={ct} fmtTick={String} fmtTag={String} w={w} layout={layout} />
               </svg>
               <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
             </>
@@ -195,23 +170,5 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
         </div>
       </section>
     </>
-  );
-}
-
-function Line({ values, x, y, base, partial, color, width = 2 }: {
-  values: (number | null)[];
-  x: (i: number) => number;
-  y: (v: number) => number;
-  base: number;
-  partial: number;
-  color: string;
-  width?: number;
-}) {
-  const p = seriesPaths(values, x, y, base, partial);
-  return (
-    <g>
-      <path d={p.solid} fill="none" stroke={color} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
-      <path d={p.dashed} fill="none" stroke={color} strokeWidth={width} strokeDasharray="3 4" strokeLinecap="round" />
-    </g>
   );
 }

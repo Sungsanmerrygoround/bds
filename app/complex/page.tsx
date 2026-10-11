@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { FavButton } from "../_components/FavButton";
 import { getFavorites } from "@/lib/favorites";
+import { findGroup } from "@/lib/params";
 import { getGroups, searchComplexes } from "@/lib/queries";
 
 export default async function ComplexSearchPage({ searchParams }: PageProps<"/complex">) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const [groups, favs] = await Promise.all([getGroups(), getFavorites()]);
-  const groupId = groups.find((g) => String(g.id) === sp.g)?.id ?? null;
+  const groupId = findGroup(groups, sp.g)?.id ?? null;
   const rows = await searchComplexes(q, groupId);
   const input = "min-h-10 rounded border border-line bg-surface-2 px-2.5 text-sm text-ink";
 
@@ -20,7 +21,7 @@ export default async function ComplexSearchPage({ searchParams }: PageProps<"/co
       <form className="panel mb-4 flex flex-wrap items-end gap-3 px-4 py-3" action="/complex">
         <label className="block">
           <span className="cap mb-1 block">단지명</span>
-          <input name="q" defaultValue={q} placeholder="예: 헬리오시티" className={`${input} w-56`} />
+          <input name="q" defaultValue={q} placeholder="예: 고덕아르테온" className={`${input} w-56`} />
         </label>
         <label className="block">
           <span className="cap mb-1 block">지역</span>

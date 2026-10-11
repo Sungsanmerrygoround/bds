@@ -1,11 +1,13 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { CompareCharts, type CompareSeries } from "../_components/CompareCharts";
 import { PeakTable } from "../_components/PeakTable";
+import { WeeklyChart, type WeeklySeries } from "../_components/WeeklyChart";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { formatEok, formatYm, shortYm } from "@/lib/format";
 import { groupColor } from "@/lib/groups";
-import { getGroups, getTrend } from "@/lib/queries";
-import { currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { rebase } from "@/lib/chart";
+import { getGroups, getTrend, getWeeklyIndex } from "@/lib/queries";
+import { currentYm, DATA_START, lastCompleteYm, monthEnd, monthsBetween, monthStart, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 import { peakRecovery } from "@/lib/stats";
 
 export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
@@ -26,9 +28,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
   });
 
   const months = monthsBetween(range.from, range.to);
-  const partialYm = partialFromYm();
-  const partialIdx = months.findIndex((m) => m >= partialYm);
-  const partialFrom = partialIdx < 0 ? months.length : partialIdx;
+  const partialFrom = partialIndex(months);
 
   const series: CompareSeries[] = groups.map((g, i) => {
     const byYm = new Map(trends[i].map((r) => [r.ym, r]));
@@ -41,6 +41,20 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
     };
   });
   const hasData = series.some((s) => s.price.some((v) => v != null));
+
+  // 부동산원 주간 매매지수: 구마다 한 선, 기간 첫 주 = 100 (구성남은 같은 색 실선·점선)
+  const weekRows = await getWeeklyIndex(groups.flatMap((g) => g.regions.map((r) => r.id)), ["sale"], monthStart(range.from), monthEnd(range.to));
+  const weeks = [...new Set(weekRows.map((r) => r.week_date))].sort();
+  const weekly: WeeklySeries[] = groups.flatMap((g, i) => g.regions.map((r, j) => {
+    const m = new Map(weekRows.filter((x) => x.region_id === r.id).map((x) => [x.week_date, x.value]));
+    return {
+      key: String(r.id),
+      label: g.regions.length > 1 ? `${g.name} ${r.sigungu_name.split(" ").at(-1)}` : g.name,
+      color: groupColor(i),
+      dashed: j > 0,
+      values: rebase(weeks.map((d) => m.get(d) ?? null)),
+    };
+  }));
 
   return (
     <FilterScope>
@@ -75,6 +89,13 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
             <CompareCharts months={months} partialFrom={partialFrom} series={series} mode={mode} />
           ) : (
             <p className="panel py-16 text-center text-sm text-muted">이 조건에 해당하는 거래가 없습니다.</p>
+          )}
+
+          {weeks.length > 1 && (
+            <WeeklyChart title="주간 매매가격지수" unit={`한국부동산원 · 기간 첫 주(${weeks[0].slice(2).replace(/-/g, ".")})=100`} weeks={weeks} series={weekly} height={240}
+              note="매주 목요일 발표 · 괄호는 전주 대비">
+              실거래보다 빠른 흐름을 봅니다. 부동산원 지수는 구 전체 기준이라 구성남의 창곡동 제외는 반영되지 않습니다.
+            </WeeklyChart>
           )}
 
           {hasData && (

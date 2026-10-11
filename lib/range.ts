@@ -53,6 +53,19 @@ export function partialFromYm(now = new Date()): string {
   return addMonths(currentYm(now), -1);
 }
 
+/** KST 기준 이번 달까지 최근 n개월 (오래된 순): 3 → [지지난달, 지난달, 이번 달] */
+export function recentMonths(n: number, now = new Date()): string[] {
+  const to = currentYm(now);
+  return monthsBetween(addMonths(to, -(n - 1)), to);
+}
+
+/** months에서 집계 중인 첫 달의 인덱스 (없으면 months.length): 차트 점선 시작 위치 */
+export function partialIndex(months: string[], now = new Date()): number {
+  const from = partialFromYm(now);
+  const i = months.findIndex((m) => m >= from);
+  return i < 0 ? months.length : i;
+}
+
 /** 집계가 끝난 가장 최근 달 */
 export function lastCompleteYm(now = new Date()): string {
   return addMonths(currentYm(now), -2);
@@ -76,4 +89,14 @@ export function resolveRange(
   }
   const preset = RANGE_PRESETS.find((p) => p.key === sp.range) ?? RANGE_PRESETS.find((p) => p.key === DEFAULT_RANGE)!;
   return { from: addMonths(to, -(preset.months - 1)), to, key: preset.key };
+}
+
+/** 202609 → "2026-09-01" */
+export function monthStart(ym: string): string {
+  return `${ym.slice(0, 4)}-${ym.slice(4)}-01`;
+}
+
+/** 202609 → "2026-09-30" (그달 마지막 날) */
+export function monthEnd(ym: string): string {
+  return new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(4)), 0)).toISOString().slice(0, 10);
 }

@@ -1,25 +1,26 @@
 import Link from "next/link";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { MetricChart } from "../_components/MetricChart";
+import { RateChart } from "../_components/RateChart";
 import { Badge, Stat } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
-import { formatEok, formatYm, shortYm } from "@/lib/format";
+import { deltaTone, formatDelta, formatEok, formatYm, shortYm, signedPct } from "@/lib/format";
 import { getGroups, getRenewal, getRenewalDrops, type RenewalRow } from "@/lib/queries";
-import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { findGroup } from "@/lib/params";
+import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialFromYm, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 
 // 전세 갱신 분석: 국토부 전월세 신고의 계약 구분(신규/갱신)·갱신요구권·종전 보증금으로
 // 갱신 비중과 갱신 때 보증금이 얼마나 오르내렸는지 본다. 감액 갱신이 늘면 역전세 신호.
 
 const MIN_N = 5; // 한 달 표본이 이보다 적으면 비율을 그리지 않는다
 const share = (a: number, b: number) => (b >= MIN_N ? (a / b) * 100 : null);
-const signed = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`;
 
 export default async function RenewalPage({ searchParams }: PageProps<"/renewal">) {
   const sp = await searchParams;
   const range = resolveRange(sp);
   const band = parseBand(sp.band);
   const groups = await getGroups();
-  const group = groups.find((g) => String(g.id) === sp.g) ?? null;
+  const group = findGroup(groups, sp.g) ?? null;
   const groupId = group?.id ?? null;
 
   const lastDone = lastCompleteYm();
@@ -32,8 +33,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
 
   const months = monthsBetween(range.from, range.to);
   const partialYm = partialFromYm();
-  const pi = months.findIndex((m) => m >= partialYm);
-  const partialFrom = pi < 0 ? months.length : pi;
+  const partialFrom = partialIndex(months);
   const byYm = new Map(rows.map((r) => [r.ym, r]));
   const at = (m: string) => byYm.get(m);
 
@@ -44,10 +44,10 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
   const downShare = (r?: RenewalRow) => (r ? share(r.down_count, r.jeonse_renew_count) : null);
 
   const now = at(lastDone), ago = at(addMonths(lastDone, -12));
-  const d = (a: number | null, b: number | null, unit = "%p") =>
-    a == null || b == null ? undefined : `${a - b >= 0 ? "▲ +" : "▼ −"}${Math.abs(a - b).toFixed(1)}${unit} 1년 전 대비`;
-  // 색은 값이 오른 쪽/내린 쪽만 뜻한다(좋고 나쁨이 아님): 상승 빨강, 하락 파랑
-  const tone = (a: number | null, b: number | null) => (a == null || b == null ? "muted" : a - b >= 0 ? "up" : "down") as "up" | "down" | "muted";
+  // 1년 전 대비 변동 (색은 오른 쪽/내린 쪽만 뜻한다: 상승 빨강, 하락 파랑)
+  const diff = (a: number | null, b: number | null) => (a == null || b == null ? null : a - b);
+  const d = (a: number | null, b: number | null, unit = "%p") => (diff(a, b) == null ? undefined : `${formatDelta(diff(a, b), unit)} 1년 전 대비`);
+  const tone = (a: number | null, b: number | null) => deltaTone(diff(a, b));
 
   const where = `${group?.name ?? "전체 지역"} · ${bandText(band)}`;
 
@@ -76,7 +76,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
               sub={d(renewShare(now), renewShare(ago))} subTone={tone(renewShare(now), renewShare(ago))} />
             <Stat label={`갱신요구권 사용 · ${shortYm(lastDone)}`} value={rrShare(now) == null ? "-" : rrShare(now)!.toFixed(0)} unit={rrShare(now) == null ? undefined : "%"}
               sub={d(rrShare(now), rrShare(ago))} subTone={tone(rrShare(now), rrShare(ago))} />
-            <Stat label={`합의 갱신 보증금 변동 · ${shortYm(lastDone)}`} value={freeChange(now) == null ? "-" : signed(freeChange(now)!)}
+            <Stat label={`합의 갱신 보증금 변동 · ${shortYm(lastDone)}`} value={signedPct(freeChange(now))}
               sub={d(freeChange(now), freeChange(ago))} subTone={tone(freeChange(now), freeChange(ago))} />
             <Stat label={`감액 갱신 비중 · ${shortYm(lastDone)}`} value={downShare(now) == null ? "-" : downShare(now)!.toFixed(0)} unit={downShare(now) == null ? undefined : "%"}
               sub={d(downShare(now), downShare(ago))} subTone={tone(downShare(now), downShare(ago))} />
@@ -104,6 +104,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
             title="감액 갱신 비중" unit="% · 전세→전세 갱신 중 보증금을 낮춘 계약" months={months} partialFrom={partialFrom} format="pct" height={180}
             series={[{ key: "down", label: "감액 / 전세 갱신", color: "var(--down)", values: months.map((m) => downShare(at(m))) }]}
           />
+          <RateChart months={months} />
 
           <section className="panel px-4 pb-3 pt-3.5">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -171,8 +172,8 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
                         <td>{r?.renew_count ?? 0}</td>
                         <td>{r?.rr_count ?? 0}</td>
                         <td>{r?.jeonse_renew_count ?? 0}</td>
-                        <td>{r?.free_change_median == null ? "-" : signed(r.free_change_median)}</td>
-                        <td>{r?.rr_change_median == null ? "-" : signed(r.rr_change_median)}</td>
+                        <td>{signedPct(r?.free_change_median)}</td>
+                        <td>{signedPct(r?.rr_change_median)}</td>
                         <td>{r?.down_count ?? 0}</td>
                         <td>{r?.up_count ?? 0}</td>
                       </tr>

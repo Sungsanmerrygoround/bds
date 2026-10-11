@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Badge } from "../_components/ui";
 import { formatEok, formatPct } from "@/lib/format";
+import { findGroup, paramStr } from "@/lib/params";
 import { EVENT_LIMIT, getEvents, getGroups, type EventRow } from "@/lib/queries";
 import { todayKst } from "@/lib/range";
 import { isUnregistered, UNREGISTERED_DAYS } from "@/lib/stats";
@@ -20,10 +21,10 @@ const SAMPLES = [
 
 export default async function EventsPage({ searchParams }: PageProps<"/events">) {
   const sp = await searchParams;
-  const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
+  const str = (k: string) => paramStr(sp[k]);
 
   const groups = await getGroups();
-  const groupId = groups.find((g) => String(g.id) === str("g"))?.id ?? null;
+  const groupId = findGroup(groups, sp.g)?.id ?? null;
   const type = str("type") === "NEW_HIGH" || str("type") === "DROP" ? (str("type") as "NEW_HIGH" | "DROP") : null;
   const months = PERIODS.find((p) => p.value === str("m"))?.value ?? "3";
   const minSamples = SAMPLES.find((s) => s.value === str("n"))?.value ?? "1";

@@ -2,7 +2,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requireEnv } from "./env";
 import type { Region } from "./normalize";
 
-export function serviceClient(): SupabaseClient {
+export type Db = SupabaseClient;
+
+export function serviceClient(): Db {
   return createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false },
   });

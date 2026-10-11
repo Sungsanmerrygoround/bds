@@ -130,10 +130,12 @@ export interface Complex {
   regions: { sigungu_name: string; group_id: number };
 }
 
+const COMPLEX_COLUMNS = "apt_seq, apt_nm, umd_nm, jibun, road_nm, build_year, regions(sigungu_name, group_id)";
+
 export async function getComplex(aptSeq: string): Promise<Complex | null> {
   const res = await db()
     .from("complexes")
-    .select("apt_seq, apt_nm, umd_nm, jibun, road_nm, build_year, regions(sigungu_name, group_id)")
+    .select(COMPLEX_COLUMNS)
     .eq("apt_seq", aptSeq)
     .maybeSingle();
   return check(res, "complexes") as Complex | null;
@@ -213,10 +215,7 @@ export async function getComplexRents(aptSeq: string, from: string, to: string):
 /** 여러 단지 기본 정보 (단지 비교용) */
 export async function getComplexes(aptSeqs: string[]): Promise<Complex[]> {
   if (aptSeqs.length === 0) return [];
-  const res = await db()
-    .from("complexes")
-    .select("apt_seq, apt_nm, umd_nm, jibun, road_nm, build_year, regions(sigungu_name, group_id)")
-    .in("apt_seq", aptSeqs);
+  const res = await db().from("complexes").select(COMPLEX_COLUMNS).in("apt_seq", aptSeqs);
   return check(res, "complexes") as unknown as Complex[];
 }
 
@@ -265,6 +264,8 @@ export interface RankRow {
   year_ago_count: number;
   peak_price: number;
   peak_date: string;
+  households: number | null; // K-apt 세대수 (짝 없는 단지는 null)
+  trades_all_12m: number; // 면적 구간과 관계없이 단지 전체 12개월 매매 (회전율용)
 }
 
 export async function getRank(groupId: number | null, band: number | null, end: string): Promise<RankRow[]> {
@@ -361,6 +362,71 @@ export async function getSupply(from: string, to: string): Promise<{ projects: S
   return { projects: check(p, "supply_projects") as SupplyProject[], manual: check(m, "manual_supply") as ManualSupply[] };
 }
 
+// ---------- 단지 기본정보 (K-apt) ----------
+
+export interface ComplexInfo {
+  apt_seq: string;
+  kapt_name: string | null;
+  households: number | null;
+  dong_count: number | null;
+  top_floor: number | null;
+  use_date: string | null;
+  heat_type: string | null;
+  parking: number | null;
+}
+
+/** 짝지은 K-apt 정보. 의무관리 대상이 아닌 소규모 단지 등은 결과에 없다. */
+export async function getComplexInfo(aptSeqs: string[]): Promise<Map<string, ComplexInfo>> {
+  if (aptSeqs.length === 0) return new Map();
+  const res = await db()
+    .from("complex_info")
+    .select("apt_seq, kapt_name, households, dong_count, top_floor, use_date, heat_type, parking")
+    .in("apt_seq", aptSeqs);
+  return new Map((check(res, "complex_info") as ComplexInfo[]).map((r) => [r.apt_seq, r]));
+}
+
+// ---------- 금리 (전국, 월별) ----------
+
+export interface RateRow {
+  series: "base" | "mortgage";
+  ym: string;
+  value: number;
+}
+
+export async function getRates(from: string, to: string): Promise<RateRow[]> {
+  const res = await db().from("rates_monthly").select("series, ym, value").gte("ym", from).lte("ym", to).order("ym");
+  return (check(res, "rates_monthly") as RateRow[]).map((r) => ({ ...r, value: Number(r.value) }));
+}
+
+// ---------- 부동산원 주간 지수 (시군구) ----------
+
+export interface WeeklyIndexRow {
+  region_id: number;
+  kind: "sale" | "jeonse";
+  week_date: string;
+  value: number;
+}
+
+/** from·to는 YYYY-MM-DD. 여러 구 × 2종 × 5년이면 천 행이 넘어 나눠 받는다. */
+export async function getWeeklyIndex(regionIds: number[], kinds: ("sale" | "jeonse")[], from: string, to: string): Promise<WeeklyIndexRow[]> {
+  const rows = await all<WeeklyIndexRow>(
+    (a, b) =>
+      db()
+        .from("price_index_weekly")
+        .select("region_id, kind, week_date, value")
+        .in("region_id", regionIds)
+        .in("kind", kinds)
+        .gte("week_date", from)
+        .lte("week_date", to)
+        .order("week_date")
+        .order("region_id")
+        .order("kind")
+        .range(a, b),
+    "price_index_weekly",
+  );
+  return rows.map((r) => ({ ...r, value: Number(r.value) }));
+}
+
 // ---------- 수집 상태 ----------
 
 // 매일 아침 수집하므로 30시간 넘게 성공 기록이 없으면 지연으로 본다
@@ -374,11 +440,12 @@ export async function getIngestStatus(): Promise<{ finishedAt: string | null; st
   };
 }
 
-export async function getLastIngest(): Promise<{ finished_at: string; job: string } | null> {
+async function getLastIngest(): Promise<{ finished_at: string; job: string } | null> {
   const res = await db()
     .from("ingest_runs")
     .select("finished_at, job")
     .eq("status", "ok")
+    .in("source", ["trade", "rent"]) // 금리·지수 수집이 실거래 수집 지연을 가리지 않게
     .not("finished_at", "is", null)
     .order("finished_at", { ascending: false })
     .limit(1)

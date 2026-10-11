@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "./range";
+import { addMonths, currentYm, lastCompleteYm, monthEnd, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel, recentMonths, resolveRange } from "./range";
 
 // 2026-09-28 10:00 KST
 const now = new Date("2026-09-28T01:00:00Z");
@@ -33,5 +33,48 @@ describe("range", () => {
     expect(resolveRange({ from: "202401", to: "203001" }, now).to).toBe("202609");
     expect(resolveRange({ from: "202413" }, now).key).toBe("3y");
     expect(resolveRange({ from: "202606", to: "202601" }, now).key).toBe("3y");
+  });
+});
+
+describe("monthStart · monthEnd", () => {
+  it("그달 첫날·마지막 날 (윤년 2월 포함)", () => {
+    expect(monthStart("202609")).toBe("2026-09-01");
+    expect(monthEnd("202609")).toBe("2026-09-30");
+    expect(monthEnd("202612")).toBe("2026-12-31");
+    expect(monthEnd("202802")).toBe("2028-02-29");
+    expect(monthEnd("202702")).toBe("2027-02-28");
+  });
+});
+
+describe("partialIndex", () => {
+  it("집계 중(이번 달·지난달) 첫 인덱스, 없으면 길이", () => {
+    // now = 2026-09-28 KST → 집계 중은 202608부터
+    expect(partialIndex(["202606", "202607", "202608", "202609"], now)).toBe(2);
+    expect(partialIndex(["202601", "202602"], now)).toBe(2);
+    expect(partialIndex(["202610"], now)).toBe(0);
+  });
+});
+
+describe("recentMonths", () => {
+  it("이번 달 포함 최근 n개월, 해 넘김", () => {
+    expect(recentMonths(3, now)).toEqual(["202607", "202608", "202609"]);
+    expect(recentMonths(1, now)).toEqual(["202609"]);
+    expect(recentMonths(10, now)[0]).toBe("202512");
+    // 2026-01-01 00:30 KST(= 2025-12-31 15:30 UTC)는 1월
+    expect(recentMonths(2, new Date("2025-12-31T15:30:00Z"))).toEqual(["202512", "202601"]);
+  });
+  it("기존 수집 스크립트의 계산(UTC 날짜 연산)과 같음", () => {
+    const old = (n: number, at: Date) => {
+      const kst = new Date(at.getTime() + 9 * 3600_000);
+      const out: string[] = [];
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() - i, 1));
+        out.push(`${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+      }
+      return out;
+    };
+    for (const at of ["2026-09-28T01:00:00Z", "2025-12-31T15:30:00Z", "2026-02-28T20:00:00Z", "2024-02-29T03:00:00Z"]) {
+      for (const n of [1, 3, 9, 36, 61]) expect(recentMonths(n, new Date(at))).toEqual(old(n, new Date(at)));
+    }
   });
 });

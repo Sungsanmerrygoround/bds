@@ -4,9 +4,10 @@ import { SupplyJeonse } from "../_components/SupplyJeonse";
 import { Badge, Card, Stat } from "../_components/ui";
 import { DEFAULT_BAND } from "@/lib/area";
 import { formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
+import { findGroup, paramStr } from "@/lib/params";
 import { getGroups, getSupply, getTrend } from "@/lib/queries";
 import { groupColor } from "@/lib/groups";
-import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm } from "@/lib/range";
+import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialIndex } from "@/lib/range";
 import { REACTION_BEFORE, supplyByGroup, supplyReactions } from "@/lib/supply";
 
 const HISTORY_AHEAD = 24; // 입주·전세 칸: 보관 시작 ~ 향후 2년
@@ -20,9 +21,9 @@ const WINDOWS = [
 
 export default async function SupplyPage({ searchParams }: PageProps<"/supply">) {
   const sp = await searchParams;
-  const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
+  const str = (k: string) => paramStr(sp[k]);
   const groups = await getGroups();
-  const groupId = groups.find((g) => String(g.id) === str("g"))?.id ?? null;
+  const groupId = findGroup(groups, sp.g)?.id ?? null;
   const win = WINDOWS.find((w) => w.value === str("w")) ?? WINDOWS[0];
   const showExcluded = str("excluded") === "1";
 
@@ -63,8 +64,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
     const byYm = new Map(jeonseRows[i].map((r) => [r.ym, r.jeonse_median]));
     return [g.id, histMonths.map((m) => byYm.get(m) ?? null)] as const;
   }));
-  const partialYm = partialFromYm();
-  const histPartial = histMonths.indexOf(partialYm);
+  const histPartial = partialIndex(histMonths);
   const reactions = supplyReactions(histMonths, supplyHist, jeonseHist, histMonths.indexOf(lastCompleteYm()), REACTION_MIN)
     .filter((r) => groupId == null || r.groupId === groupId);
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
@@ -107,7 +107,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
               지역별 전용 {DEFAULT_BAND}㎡ 전세 중위가(위)와 월별 입주 세대(아래). {REACTION_MIN}세대 이상 입주한 달은 위 칸에 점선으로 표시. 흐린 막대 = 앞으로 입주.
             </p>
           </div>
-          <SupplyJeonse months={histMonths} partialFrom={histPartial < 0 ? histMonths.length : histPartial} nowIdx={histMonths.indexOf(now)} panels={panels} />
+          <SupplyJeonse months={histMonths} partialFrom={histPartial} nowIdx={histMonths.indexOf(now)} panels={panels} />
           <div className="panel px-4 pb-3 pt-3.5">
             <h3 className="text-sm font-semibold">대규모 입주 전후 전세 변화</h3>
             <p className="mb-2 mt-0.5 text-xs text-muted">

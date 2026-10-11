@@ -29,6 +29,9 @@
   --group-3: #199e70;
   --group-4: #c98500;
   --group-5: #d55181;
+  /* 금리 차트 (다크 표면 기준 CVD 검증 통과 쌍) */
+  --rate-base: #199e70;
+  --rate-mortgage: #d95926;
 }
 
 @theme inline {

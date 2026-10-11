@@ -4,6 +4,7 @@ import Link from "next/link";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import { NavLinks } from "./_components/NavLinks";
 import { GradientDefs } from "./_components/ui";
+import { formatEok } from "@/lib/format";
 import { getIngestStatus, getTicker, type TickerRow } from "@/lib/queries";
 import "./globals.css";
 
@@ -47,7 +48,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {ticker.length > 0 && <Ticker rows={ticker} />}
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 sm:px-6">{children}</main>
         <footer className="mx-auto w-full max-w-[1400px] px-4 pb-6 text-xs text-muted sm:px-6">
-          출처: 국토교통부 실거래가 공개시스템, 한국부동산원 청약홈. 전용 55㎡ 미만 제외, 가격은 해제·정정 거래를 뺀 값.
+          출처: 국토교통부 실거래가 공개시스템, 한국부동산원 청약홈·R-ONE(주간 아파트 가격지수), 한국은행 경제통계시스템(ECOS),
+          공동주택관리정보시스템(K-apt). 전용 55㎡ 미만 제외, 가격은 해제·정정 거래를 뺀 값.
         </footer>
       </body>
     </html>
@@ -73,7 +75,7 @@ function Ticker({ rows }: { rows: TickerRow[] }) {
           >
             <span className="text-ink">{r.complexes.apt_nm}</span>
             <span className="mono text-muted">{r.area_type}㎡</span>
-            <span className="mono text-ink">{(r.price_man / 10000).toFixed(2)}억</span>
+            <span className="mono text-ink">{formatEok(r.price_man)}</span>
             <span className="mono text-up">+{Number(r.change_pct).toFixed(1)}%</span>
           </Link>
         ))}

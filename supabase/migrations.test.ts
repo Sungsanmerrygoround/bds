@@ -34,11 +34,13 @@ beforeAll(async () => {
 });
 
 describe("migrations", () => {
-  it("시드: 5개 그룹, 6개 시군구, 구성남은 2개 시군구", async () => {
+  it("시드: 4개 그룹, 5개 시군구(송파 제외), 구성남은 2개 시군구", async () => {
     const g = await db.query<{ name: string; n: number }>(
       "select g.name, count(*)::int n from regions r join region_groups g on g.id = r.group_id group by g.name");
-    expect(g.rows).toHaveLength(5);
+    expect(g.rows).toHaveLength(4);
     expect(g.rows.find((r) => r.name === "구성남")?.n).toBe(2);
+    expect(g.rows.find((r) => r.name === "송파")).toBeUndefined();
+    expect((await db.query("select 1 from region_groups where name = '송파'")).rows).toHaveLength(0);
   });
 
   it("area_band SQL = lib/area.ts", async () => {
@@ -166,5 +168,45 @@ describe("detect_events", () => {
     await db.query("update apt_trades set is_cancelled = false where id = $1", [id]);
     await db.query("select refresh_event_validity()");
     expect((await eventsOf(id))[0].invalidated_at).toBeNull();
+  });
+});
+
+describe("외부 데이터 테이블 (금리·지수·단지정보)", () => {
+  it("rates_monthly: (계열, 월) 기본키, 계열 이름 제한", async () => {
+    await db.query("insert into rates_monthly (series, ym, value) values ('base', '202609', 3), ('mortgage', '202608', 4.66)");
+    await expect(db.query("insert into rates_monthly (series, ym, value) values ('base', '202609', 3.25)")).rejects.toThrow();
+    await expect(db.query("insert into rates_monthly (series, ym, value) values ('cd', '202609', 3)")).rejects.toThrow();
+  });
+  it("ingest_runs.source: 금리·지수·단지정보 허용, 그 밖은 거부", async () => {
+    for (const s of ["trade", "rent", "supply", "rate", "index", "kapt"]) {
+      await db.query("insert into ingest_runs (batch_id, job, source) values (gen_random_uuid(), 'test', $1)", [s]);
+    }
+    await expect(db.query("insert into ingest_runs (batch_id, job, source) values (gen_random_uuid(), 'test', 'other')")).rejects.toThrow();
+  });
+  it("complex_rank: K-apt 세대수 붙이기 (짝 없으면 null)", async () => {
+    await db.exec(`insert into complex_info (apt_seq, kapt_code, households, match_method) values ('R-1', 'A1', 1234, 'jibun')`);
+    const r = await db.query<{ apt_seq: string; households: number | null }>("select apt_seq, households from complex_rank(1, null, '201809') order by apt_seq");
+    expect(r.rows.find((x) => x.apt_seq === "R-1")?.households).toBe(1234);
+    // 회전율용 전체 면적 12개월 매매(1710~1809, 해제 제외): 84㎡ 2건 + 59㎡ 1건 = 3, 84㎡ 기준 trades_12m은 그대로 2
+    await trade({ date: "2018-05-01", price: 50000, seq: "R-1", area: 59.9 });
+    const all = await db.query<{ trades_12m: number; trades_all_12m: number }>("select trades_12m, trades_all_12m from complex_rank(1, 84::smallint, '201809') where apt_seq = 'R-1'");
+    expect(all.rows[0]).toEqual({ trades_12m: 2, trades_all_12m: 3 });
+    expect(r.rows.filter((x) => x.apt_seq !== "R-1").every((x) => x.households == null)).toBe(true);
+  });
+  it("complex_info: match_method 제한, 단지 삭제 시 함께 삭제", async () => {
+    await expect(db.query("insert into complex_info (apt_seq, kapt_code, match_method) values ('T-2', 'A2', 'guess')")).rejects.toThrow();
+    await db.exec("insert into complexes (apt_seq, region_id, lawd_cd, apt_nm) values ('D-1', 1, '41117', '삭제')");
+    await db.exec("insert into complex_info (apt_seq, kapt_code, match_method) values ('D-1', 'A3', 'name')");
+    await db.exec("delete from complexes where apt_seq = 'D-1'");
+    expect((await db.query("select 1 from complex_info where apt_seq = 'D-1'")).rows).toHaveLength(0);
+  });
+  it("kapt_complexes: 목록 등록 후 기본정보 채우기, price_index_weekly는 월요일만", async () => {
+    await db.exec("insert into kapt_complexes (kapt_code, kapt_name, lawd_cd, bjd_code, dong) values ('A9', '매탄극동', '41117', '4111710100', '매탄동')");
+    const r = await db.query<{ is_listed: boolean; basis_at: string | null }>("select is_listed, basis_at from kapt_complexes where kapt_code = 'A9'");
+    expect(r.rows[0]).toEqual({ is_listed: true, basis_at: null });
+    await db.exec("insert into price_index_weekly (region_id, kind, week_date, value) values (1, 'sale', '2026-10-05', 100.62404)");
+    await expect(db.query("insert into price_index_weekly (region_id, kind, week_date, value) values (1, 'sale', '2026-10-06', 100)")).rejects.toThrow();
+    const reb = await db.query<{ n: number }>("select count(*)::int n from regions where reb_cls_id is not null");
+    expect(reb.rows[0].n).toBe(5);
   });
 });

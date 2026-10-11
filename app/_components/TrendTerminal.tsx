@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { barPath, niceTicks, seriesPaths } from "@/lib/chart";
+import { barPath, linearY, niceTicks, seriesPaths } from "@/lib/chart";
 import { formatEok, longYm } from "@/lib/format";
-import { axisLayout, chartPad, chartPanel, fx, pointerSelect, Swatch, Tag, timeScale, useWidth, XAxis, YearMarks, YLabel } from "./chartKit";
+import {
+  axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow, Swatch, Tag, timeScale,
+  useWidth, XAxis, YearMarks, YLabel,
+} from "./chartKit";
 
 // 추이 화면의 중위가·전세가율·거래량 차트. 세 차트가 같은 시간축과 크로스헤어를 공유한다.
 // 가격 축은 오른쪽(트레이딩 차트 관례), 최신 값과 크로스헤어 값은 축 위 태그로 표시.
@@ -45,14 +48,14 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
 
   const priceVals = [...trade, ...jeon].filter((v): v is number => v != null);
   const pt = niceTicks(Math.min(...priceVals), Math.max(...priceVals), 5);
-  const py = (v: number) => PT + (PH - PT - PB) * (1 - (v - pt[0]) / (pt[pt.length - 1] - pt[0]));
+  const py = linearY(pt, PT, PH, PB);
 
   const ratioVals = ratio.filter((v): v is number => v != null);
   const rt = ratioVals.length ? niceTicks(Math.min(...ratioVals), Math.max(...ratioVals), 2) : [];
-  const ry = (v: number) => RT + (RH - RT - RB) * (1 - (v - rt[0]) / (rt[rt.length - 1] - rt[0]));
+  const ry = linearY(rt, RT, RH, RB);
 
   const vt = niceTicks(0, Math.max(1, ...data.map((d) => Math.max(d.tradeCount, d.jeonseCount))), 4);
-  const vy = (v: number) => VT + (VH - VT - VB) * (1 - v / vt[vt.length - 1]);
+  const vy = linearY(vt, VT, VH, VB); // 거래량 눈금은 0부터
 
   const hx = X(h);
   const tagX = w - R0 + 4;
@@ -71,13 +74,8 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
   return (
     <>
       <section className={chartPanel}>
-        <div className={`${chartPad} flex flex-wrap items-center justify-between gap-2`}>
-          <h2 className="text-sm font-semibold">
-            월별 중위가 <span className="mono text-xs font-normal text-muted">{title}</span>
-          </h2>
-          <span className="mono text-[11px] text-muted">점선 = 신고 기한(30일) 안이라 집계 중</span>
-        </div>
-        <div className={`${chartPad} mono flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2`}>
+        <ChartTitle title="월별 중위가" unit={title} right={<span className="mono text-[11px] text-muted">점선 = 신고 기한(30일) 안이라 집계 중</span>} />
+        <div className={`${chartPad} ${readoutRow}`}>
           <span className="font-semibold text-ink">{longYm(hd.ym)}</span>
           <Swatch color="var(--series-1)" label="매매" value={formatEok(hd.trade)} />
           <Swatch color="var(--series-2)" label="전세" value={formatEok(hd.jeonse)} />
@@ -89,19 +87,19 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
           {w > 0 && priceVals.length > 0 && (
             <>
               <svg width={w} height={PH} className="absolute left-0 top-0 block" role="img" aria-label="월별 매매·전세 중위가 차트" {...pointer}>
-                {pt.map((v) => <path key={v} d={`M${L0} ${fx(py(v))} H${w - R0}`} stroke="var(--grid)" strokeDasharray="2 4" />)}
+                <GridLines ticks={pt} y={py} x0={L0} x1={w - R0} />
                 <YearMarks ts={ts} height={PH} />
                 <Series values={jeon} x={X} y={py} base={PH - PB} partial={P} color="var(--series-2)" grad="grad-s2" />
                 <Series values={trade} x={X} y={py} base={PH - PB} partial={P} color="var(--series-1)" grad="grad-s1" />
-                <path d={`M${fx(hx)} 0 V${PH}`} stroke="#6b7280" />
+                <Crosshair x={hx} height={PH} />
                 {trade[h] != null && (
                   <>
                     <path d={`M${L0} ${fx(py(trade[h]!))} H${w - R0}`} stroke="#6b7280" strokeDasharray="3 3" />
                     <circle cx={hx} cy={py(trade[h]!)} r={10} fill="var(--series-1)" fillOpacity={0.18} />
-                    <circle cx={hx} cy={py(trade[h]!)} r={4.5} fill="var(--series-1)" stroke="var(--surface)" strokeWidth={2.5} />
+                    <HoverDot x={hx} y={py(trade[h]!)} color="var(--series-1)" r={4.5} />
                   </>
                 )}
-                {jeon[h] != null && <circle cx={hx} cy={py(jeon[h]!)} r={4.5} fill="var(--series-2)" stroke="var(--surface)" strokeWidth={2.5} />}
+                {jeon[h] != null && <HoverDot x={hx} y={py(jeon[h]!)} color="var(--series-2)" r={4.5} />}
                 {pt.slice(layout.compact ? 1 : 0).filter((v) => showTick(py(v))).map((v) => (
                   <YLabel key={v} y={py(v)} text={`${v}억`} w={w} layout={layout} />
                 ))}
@@ -114,12 +112,12 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
                 <svg width={w} height={RH} className="absolute left-0 block" style={{ top: PH + 4, ...pointer.style }} aria-hidden="true"
                   onPointerMove={pointer.onPointerMove} onPointerDown={pointer.onPointerDown} onPointerLeave={pointer.onPointerLeave}>
                   <path d={`M0 0.5 H${w}`} stroke="var(--axis)" />
-                  {rt.map((v) => <path key={v} d={`M${L0} ${fx(ry(v))} H${w - R0}`} stroke="var(--grid)" strokeDasharray="2 4" />)}
+                  <GridLines ticks={rt} y={ry} x0={L0} x1={w - R0} />
                   <YearMarks ts={ts} height={RH} labels={false} />
                   <text x={L0} y={15} fontSize={11} letterSpacing="0.08em" fill="var(--muted)">전세가율</text>
                   <Series values={ratio} x={X} y={ry} base={RH - RB} partial={P} color="var(--series-3)" grad="grad-s3" width={1.75} />
-                  <path d={`M${fx(hx)} 0 V${RH}`} stroke="#6b7280" />
-                  {ratio[h] != null && <circle cx={hx} cy={ry(ratio[h]!)} r={4} fill="var(--series-3)" stroke="var(--surface)" strokeWidth={2.5} />}
+                  <Crosshair x={hx} height={RH} />
+                  {ratio[h] != null && <HoverDot x={hx} y={ry(ratio[h]!)} color="var(--series-3)" />}
                   {rt.map((v) => (
                     // 좁은 화면에서도 전세가율 라벨은 오른쪽(왼쪽 위에 '전세가율' 제목이 있음)
                     <text key={v} x={w - R0 + (layout.compact ? 6 : 10)} y={ry(v) + 4} className="mono" fontSize={font} fill="var(--muted)">{v}%</text>
@@ -146,7 +144,7 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
         <div className="relative w-full select-none" style={{ height: VH }}>
           {w > 0 && (
             <svg width={w} height={VH} className="block" role="img" aria-label="월별 매매·전세 거래량 막대 차트" {...pointer}>
-              {vt.slice(1).map((v) => <path key={v} d={`M${L0} ${fx(vy(v))} H${w - R0}`} stroke="var(--grid)" strokeDasharray="2 4" />)}
+              <GridLines ticks={vt.slice(1)} y={vy} x0={L0} x1={w - R0} />
               <rect x={hx - ts.slot / 2} y={0} width={ts.slot} height={VH - VB} rx={3} fill="#fff" fillOpacity={0.035} />
               <Bars data={data} x={X} y={vy} base={VH - VB} slot={ts.slot} h={h} />
               <path d={`M${L0} ${VH - VB + 0.5} H${w - R0}`} stroke="var(--axis)" />

@@ -5,8 +5,9 @@ import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@
 import { getFavorites, isValidAptSeq } from "@/lib/favorites";
 import { formatEok, formatYm } from "@/lib/format";
 import { groupColor } from "@/lib/groups";
-import { getComplexes, getComplexRents, getComplexTrades, searchComplexes } from "@/lib/queries";
-import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { paramStr } from "@/lib/params";
+import { getComplexes, getComplexInfo, getComplexRents, getComplexTrades, searchComplexes } from "@/lib/queries";
+import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 import { median, rollingMedian } from "@/lib/stats";
 
 // 단지 비교: 최대 5개 단지의 같은 면적 구간 가격을 한 차트에.
@@ -17,7 +18,7 @@ const ymOf = (date: string) => date.slice(0, 4) + date.slice(5, 7);
 
 export default async function ComplexComparePage({ searchParams }: PageProps<"/complex/compare">) {
   const sp = await searchParams;
-  const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
+  const str = (k: string) => paramStr(sp[k]);
   const ids = [...new Set((str("ids") ?? "").split(",").filter(isValidAptSeq))].slice(0, MAX);
   const range = resolveRange(sp);
   const band = parseBand(sp.band);
@@ -27,19 +28,18 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
 
   const from3 = addMonths(range.from, -2); // 이동 중위의 첫 달을 위해 2개월 앞부터
   const favs = await getFavorites();
-  const [complexes, found, data] = await Promise.all([
+  const [complexes, found, data, infos] = await Promise.all([
     getComplexes([...new Set([...ids, ...favs])]), // 관심 단지 이름(추가 버튼)도 한 번에
     q ? searchComplexes(q, null) : Promise.resolve([]),
     Promise.all(ids.map((id) => Promise.all([getComplexTrades(id, from3, range.to), getComplexRents(id, from3, range.to)]))),
+    getComplexInfo(ids),
   ]);
   const byId = new Map(complexes.map((c) => [c.apt_seq, c]));
   const valid = ids.filter((id) => byId.has(id));
 
   const months = monthsBetween(range.from, range.to);
   const windowMonths = monthsBetween(from3, range.to);
-  const partialYm = partialFromYm();
-  const pi = months.findIndex((m) => m >= partialYm);
-  const partialFrom = pi < 0 ? months.length : pi;
+  const partialFrom = partialIndex(months);
   const inBand = (b: number | null) => band == null || b === band;
   const lastDone = lastCompleteYm();
   const recentFrom = addMonths(lastDone, -2);
@@ -92,7 +92,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
         {valid.length < MAX && (
           <form action="/complex/compare" className="flex flex-wrap items-center gap-2">
             {Object.entries(sp).map(([k, v]) => (typeof v === "string" && k !== "q" ? <input key={k} type="hidden" name={k} value={k === "ids" ? valid.join(",") : v} /> : null))}
-            <input name="q" defaultValue={q} placeholder="단지명으로 추가 (예: 헬리오시티)" aria-label="추가할 단지 검색"
+            <input name="q" defaultValue={q} placeholder="단지명으로 추가 (예: 고덕아르테온)" aria-label="추가할 단지 검색"
               className="min-h-10 w-64 max-w-full rounded border border-line bg-surface-2 px-2.5 text-sm text-ink" />
             <button className="min-h-10 rounded border border-line px-3 text-sm hover:bg-wash">검색</button>
           </form>
@@ -147,11 +147,12 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
 
           {rows.length > 0 && (
             <div className="panel overflow-x-auto">
-              <table className="mono w-full min-w-[760px] text-[13px]">
+              <table className="mono w-full min-w-[840px] text-[13px]">
                 <thead className="text-xs text-muted">
                   <tr className="text-right">
                     <th className="px-3 py-2 text-left font-normal">단지 · {bandText(band)}</th>
                     <th className="px-2 font-normal">준공</th>
+                    <th className="px-2 font-normal">세대수</th>
                     <th className="px-2 font-normal">기간 매매/전세</th>
                     <th className="px-2 font-normal">최근 매매</th>
                     <th className="px-2 font-normal">최근 3개월 매매 중위</th>
@@ -169,6 +170,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
                         <span className="ml-1.5 text-xs text-muted">{r.c.regions.sigungu_name} {r.c.umd_nm}</span>
                       </td>
                       <td className="px-2 text-ink-2">{r.c.build_year ?? "-"}</td>
+                      <td className="px-2 text-ink-2">{infos.get(r.id)?.households?.toLocaleString("ko-KR") ?? "-"}</td>
                       <td className="px-2">{r.tradeN} / {r.jeonseN}</td>
                       <td className="px-2">
                         {formatEok(r.last?.price_man)}

@@ -1,8 +1,9 @@
 name: ingest
 
-# 매일 KST 07:10 실거래(최근 3개월 재수집 + 신고가·하락 판단),
-# 매주 월요일 KST 07:40 청약홈 입주 물량 + 3~8개월 전 매매 재수집(나중에 채워지는 등기일 반영).
-# 실패하면 GitHub가 저장소 소유자에게 메일을 보낸다.
+# 매일 KST 07:10 실거래(최근 3개월 재수집 + 신고가·하락 판단) + 부동산원 주간 지수(목요일 발표분은 금요일에 들어옴),
+# 매주 월요일 KST 07:40 청약홈 입주 물량 + 3~8개월 전 매매 재수집(나중에 채워지는 등기일 반영) + 금리 + K-apt 단지 기본정보
+#   (K-apt는 없는·60일 지난 단지만 받아 캐시에 쌓으므로 평소엔 호출이 적고, 장애로 끊겨도 다음 주에 이어 받는다).
+# 실거래 외 수집은 단계를 나눠, 하나가 실패해도 나머지는 돈다 (실패하면 실행 전체가 실패로 표시되고 메일이 간다).
 on:
   schedule:
     - cron: "10 22 * * *" # 매일 22:10 UTC = KST 07:10
@@ -12,7 +13,7 @@ on:
       job:
         description: "실행할 작업"
         type: choice
-        options: [daily, supply, refresh]
+        options: [daily, supply, refresh, rates, index, kapt]
         default: daily
 
 concurrency:
@@ -25,11 +26,13 @@ permissions:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }} # 금리 (rates)
+      REB_API_KEY: ${{ secrets.REB_API_KEY }} # 부동산원 주간 지수 (index)
       JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '40 22 * * 0' && 'supply' || 'daily') }}
     steps:
       - uses: actions/checkout@v5
@@ -50,6 +53,15 @@ jobs:
           case "$SUPABASE_URL" in https://*.supabase.co|https://*.supabase.co/) ;; *) echo "::error::SUPABASE_URL 형식이 https://<ref>.supabase.co 가 아닙니다"; fail=1;; esac
           exit $fail
       - run: npm run ingest -- "$JOB"
+      - name: 부동산원 주간 지수 (매일)
+        if: ${{ !cancelled() && github.event.schedule == '10 22 * * *' }}
+        run: npm run ingest -- index
       - name: 등기일 반영 재수집 (주간)
-        if: github.event.schedule == '40 22 * * 0'
+        if: ${{ !cancelled() && github.event.schedule == '40 22 * * 0' }}
         run: npm run ingest -- refresh
+      - name: 금리 (주간)
+        if: ${{ !cancelled() && github.event.schedule == '40 22 * * 0' }}
+        run: npm run ingest -- rates
+      - name: K-apt 단지 기본정보 (주간)
+        if: ${{ !cancelled() && github.event.schedule == '40 22 * * 0' }}
+        run: npm run ingest -- kapt
