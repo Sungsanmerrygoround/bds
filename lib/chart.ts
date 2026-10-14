@@ -139,26 +139,49 @@ export function barPath(x: number, w: number, top: number, base: number, radius 
   return `M${f(x)} ${f(base)} V${f(top + r)} Q${f(x)} ${f(top)} ${f(x + r)} ${f(top)} H${f(x + w - r)} Q${f(x + w)} ${f(top)} ${f(x + w)} ${f(top + r)} V${f(base)} Z `;
 }
 
+// ---------- 시간축 ----------
+
+export interface TimeScale {
+  n: number;
+  X: (i: number) => number;
+  slot: number; // 점 사이 간격(px)
+  xTicks: { i: number; label: string }[];
+  jans: number[]; // 1월(새해) 시작 인덱스: 연도 구분선
+  yearLabels: { i: number; label: string }[];
+}
+
 /**
- * 주 단위 시간축 (주간 지수). weeks = 월요일 날짜(YYYY-MM-DD) 오름차순.
- * 눈금은 각 달의 첫 주에, 1·3·6·12개월 중 라벨 간격이 44px 이상인 간격으로.
- * jans/yearLabels는 chartKit의 YearMarks가 그대로 쓴다.
+ * 시간축 공통: n개 점을 [L0, w−R0]에 고르게 놓고, 달이 바뀌는 점(starts)에 눈금·연도 표시.
+ * 눈금 간격은 1·3·6·12개월 중 라벨 사이가 44px 이상인 것, 첫 연도 라벨은 다음 1월 라벨과 겹치지 않을 때만.
+ * ym(i) = i번째 점의 YYYYMM, perMonth = 한 달에 든 점 수 (월 1, 주 약 4.35).
  */
-export function weekScale(weeks: string[], w: number, L0: number, R0: number) {
-  const n = weeks.length;
+function scale(n: number, w: number, L0: number, R0: number, starts: number[], ym: (i: number) => string, perMonth: number): TimeScale {
   const IW = Math.max(1, w - L0 - R0);
   const X = (i: number) => (n === 1 ? L0 + IW / 2 : L0 + (IW * i) / (n - 1));
   const slot = n > 1 ? IW / (n - 1) : IW;
-  const month = (i: number) => Number(weeks[i].slice(5, 7));
-  // 달이 바뀐 첫 주 (첫 주는 이전 주가 없으니 제외: 달 중간에서 시작할 수 있다)
-  const firsts = weeks.map((_, i) => i).filter((i) => i > 0 && month(i) !== month(i - 1));
-  const every = [1, 3, 6, 12].find((m) => slot * 4.35 * m >= 44) ?? 12;
-  const xTicks = firsts
+  const month = (i: number) => Number(ym(i).slice(4));
+  const every = [1, 3, 6, 12].find((m) => slot * perMonth * m >= 44) ?? 12;
+  const xTicks = starts
     .filter((i) => (month(i) - 1) % every === 0)
-    .map((i) => ({ i, label: every >= 6 ? `${weeks[i].slice(2, 4)}.${weeks[i].slice(5, 7)}` : `${month(i)}월` }));
-  const jans = firsts.filter((i) => month(i) === 1);
-  const yearLabels = [...(jans.length === 0 || X(jans[0]) - X(0) >= 48 ? [0] : []), ...jans].map((i) => ({ i, label: weeks[i].slice(0, 4) }));
+    .map((i) => ({ i, label: every >= 6 ? `${ym(i).slice(2, 4)}.${ym(i).slice(4)}` : `${month(i)}월` }));
+  const jans = starts.filter((i) => month(i) === 1 && i > 0);
+  const yearLabels = [...(jans.length === 0 || X(jans[0]) - X(0) >= 48 ? [0] : []), ...jans].map((i) => ({ i, label: ym(i).slice(0, 4) }));
   return { n, X, slot, xTicks, jans, yearLabels };
+}
+
+/** 월 단위 시간축. months = YYYYMM 오름차순 (빈 달 없이) */
+export function timeScale(months: string[], w: number, L0: number, R0: number): TimeScale {
+  return scale(months.length, w, L0, R0, months.map((_, i) => i), (i) => months[i], 1);
+}
+
+/**
+ * 주 단위 시간축 (주간 지수). weeks = 월요일 날짜(YYYY-MM-DD) 오름차순.
+ * 눈금·연도 구분은 각 달의 첫 주에 (첫 주는 이전 주가 없으니 제외: 달 중간에서 시작할 수 있다).
+ */
+export function weekScale(weeks: string[], w: number, L0: number, R0: number): TimeScale {
+  const ym = (i: number) => weeks[i].slice(0, 4) + weeks[i].slice(5, 7);
+  const firsts = weeks.map((_, i) => i).filter((i) => i > 0 && ym(i) !== ym(i - 1));
+  return scale(weeks.length, w, L0, R0, firsts, ym, 4.35);
 }
 
 /** 직전 값 대비 변동률(%). 앞 값이 없으면 null */

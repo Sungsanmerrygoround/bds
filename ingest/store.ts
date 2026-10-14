@@ -1,7 +1,6 @@
 // 한 시군구·한 달 단위 적재: upsert + 응답에서 사라진 행 missing 처리
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { check, selectAll } from "./db";
+import { check, selectAll, type Db } from "./db";
 import type { Kind } from "./molit";
 import type { ComplexRow, RentRow, TradeRow } from "./normalize";
 
@@ -23,7 +22,7 @@ export interface StoreResult {
   changedIds: number[];
 }
 
-export async function upsertComplexes(db: SupabaseClient, rows: ComplexRow[], kind: Kind) {
+export async function upsertComplexes(db: Db, rows: ComplexRow[], kind: Kind) {
   if (rows.length === 0) return;
   const payload = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }));
   // 전월세 API는 umdCd 등이 없어서 매매에서 받은 단지 정보를 덮어쓰지 않도록 신규만 넣는다.
@@ -34,7 +33,7 @@ export async function upsertComplexes(db: SupabaseClient, rows: ComplexRow[], ki
 }
 
 export async function storeMonth(
-  db: SupabaseClient,
+  db: Db,
   kind: Kind,
   lawdCd: string,
   ym: string,
@@ -52,6 +51,7 @@ export async function storeMonth(
         .eq("lawd_cd", lawdCd)
         .eq("deal_ymd", ym)
         .order("id")
+        // 열 이름(trade_key/rent_key)을 런타임에 고르는 select라 타입 추론이 안 돼 행 형식을 직접 적는다
         .range(from, to) as unknown as PromiseLike<{ data: Existing[] | null; error: { message: string } | null }>,
     `${table} 기존 행 조회`,
   );

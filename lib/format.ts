@@ -42,7 +42,7 @@ export function deltaTone(v: number | null): "up" | "down" | "muted" {
 
 /** 세대수 "1,234세대" */
 export function formatHouseholds(n: number | null | undefined): string {
-  return n == null ? "-" : `${n.toLocaleString("ko-KR")}세대`;
+  return n == null ? "-" : `${formatCount(n)}세대`;
 }
 
 /** 단지 기본정보 한 줄: ["1,234세대", "12개 동", "최고 25층", "2009.03 사용승인", "주차 세대당 1.20대", "지역난방"] */
@@ -59,3 +59,11 @@ export function complexFacts(i: {
     i.heat_type,
   ].filter((s): s is string => !!s);
 }
+
+/** 개수 "1,234" (없으면 "-") */
+export function formatCount(n: number | null | undefined): string {
+  return n == null ? "-" : n.toLocaleString("ko-KR");
+}
+
+/** "2026-09-18" → "26.09.18" */
+export const shortDate = (date: string) => date.slice(2).replace(/-/g, ".");

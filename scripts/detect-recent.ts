@@ -2,13 +2,12 @@
 //   npx tsx scripts/detect-recent.ts [개월]
 import "../ingest/env";
 import { check, getSettingNum, selectAll, serviceClient } from "../ingest/db";
+import { monthsAgo } from "../lib/range";
 
 async function main() {
   const db = serviceClient();
   const months = Number(process.argv[2]) || (await getSettingNum(db, "daily_lookback_months", 3));
-  const since = new Date();
-  since.setMonth(since.getMonth() - months);
-  const sinceDate = since.toISOString().slice(0, 10);
+  const sinceDate = monthsAgo(months);
 
   const rows = await selectAll<{ id: number }>(
     (from, to) => db.from("apt_trades").select("id").gte("deal_date", sinceDate).order("id").range(from, to),

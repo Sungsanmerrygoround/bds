@@ -6,16 +6,19 @@ import { FavButton } from "../../_components/FavButton";
 import { Badge, Card, Stat } from "../../_components/ui";
 import { getFavorites } from "@/lib/favorites";
 import { complexFacts, formatEok, formatPct } from "@/lib/format";
+import { isAptSeq, safeDecode } from "@/lib/params";
 import { getComplex, getComplexInfo, getComplexRents, getComplexTrades } from "@/lib/queries";
-import { currentYm, rangeLabel, resolveRange, todayKst } from "@/lib/range";
-import { isUnregistered, median, UNREGISTERED_DAYS } from "@/lib/stats";
+import { currentYm, monthsAgo, rangeLabel, resolveRange, todayKst } from "@/lib/range";
+import { isUnregistered, jeonseRatio, median, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const TABLE_ROWS = 50;
 const ts = (date: string) => Date.parse(`${date}T00:00:00Z`);
 
 export default async function ComplexPage({ params, searchParams }: PageProps<"/complex/[aptSeq]">) {
   const { aptSeq: raw } = await params;
-  const aptSeq = decodeURIComponent(raw);
+  // 단지 코드 형식이 아닌 주소는 DB 조회 없이 404
+  const aptSeq = safeDecode(raw);
+  if (!aptSeq || !isAptSeq(aptSeq)) notFound();
   const sp = await searchParams;
   const range = resolveRange(sp);
 
@@ -62,10 +65,10 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
   // 요약
   const lastTrade = validTrades[0];
   const maxTrade = validTrades.reduce<number | null>((m, r) => (m == null || r.price_man > m ? r.price_man : m), null);
-  const recentCut = new Date();
-  recentCut.setMonth(recentCut.getMonth() - 3);
-  const recentJeonse = median(jeonse.filter((r) => r.deal_date >= recentCut.toISOString().slice(0, 10)).map((r) => r.deposit_man));
-  const recentTrade = median(validTrades.filter((r) => r.deal_date >= recentCut.toISOString().slice(0, 10)).map((r) => r.price_man));
+  const recentCut = monthsAgo(3);
+  const recentJeonse = median(jeonse.filter((r) => r.deal_date >= recentCut).map((r) => r.deposit_man));
+  const recentTrade = median(validTrades.filter((r) => r.deal_date >= recentCut).map((r) => r.price_man));
+  const ratio = jeonseRatio(recentTrade, recentJeonse);
 
   return (
     <FilterScope>
@@ -117,7 +120,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
           <Stat
             label="최근 3개월 전세 중위"
             value={formatEok(recentJeonse)}
-            sub={recentTrade && recentJeonse ? `전세가율 ${Math.round((recentJeonse / recentTrade) * 100)}%` : undefined}
+            sub={ratio == null ? undefined : `전세가율 ${Math.round(ratio)}%`}
           />
         </div>
 

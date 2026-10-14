@@ -27,8 +27,3 @@ export function db(): SupabaseClient {
   }
   return client;
 }
-
-export function check<T>(res: { data: T; error: { message: string } | null }, what: string): T {
-  if (res.error) throw new Error(`${what}: ${res.error.message}`);
-  return res.data;
-}

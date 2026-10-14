@@ -36,3 +36,21 @@ export async function requestWithRetry<T>(
     }
   }
 }
+
+// ---------- data.go.kr 공통 오류 응답 ----------
+
+/** 키 미등록·트래픽 초과 등 재시도해도 소용없는 data.go.kr 오류 코드 */
+export const DATA_GO_KR_FATAL = new Set(["20", "22", "30", "31", "32", "33"]);
+
+/** data.go.kr 오류 코드·메시지 → 오류 (`${label} ${코드}: ${메시지}`), 재시도 무의미한 코드면 FatalApiError */
+export function dataGoKrError(code: unknown, msg: unknown, label: string): Error {
+  const Err = DATA_GO_KR_FATAL.has(String(code)) ? FatalApiError : Error;
+  return new Err(`${label} ${code}: ${msg}`);
+}
+
+/** data.go.kr XML 오류 응답 → 오류 */
+export function dataGoKrXmlError(text: string, label: string): Error {
+  const code = /<returnReasonCode>(\w+)/.exec(text)?.[1] ?? /<resultCode>(\w+)/.exec(text)?.[1] ?? "?";
+  const msg = /<returnAuthMsg>([^<]+)/.exec(text)?.[1] ?? /<resultMsg>([^<]+)/.exec(text)?.[1] ?? text.slice(0, 200);
+  return dataGoKrError(code, msg, label);
+}

@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Dimmed, FilterScope, OptionList, RailLayout } from "../_components/Filters";
 import { FavButton } from "../_components/FavButton";
+import { toneText } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { getFavorites } from "@/lib/favorites";
-import { formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
-import { findGroup } from "@/lib/params";
+import { deltaTone, formatCount, formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
+import { findGroup, groupOptions, groupValue } from "@/lib/params";
 import { getGroups, getRank, type RankRow } from "@/lib/queries";
-import { addMonths, DATA_START, lastCompleteYm } from "@/lib/range";
+import { addMonths, DATA_START, lastCompleteYm, ymOfDate } from "@/lib/range";
 import { pctChange } from "@/lib/stats";
 
 // 단지 순위: 집계가 끝난 최근 12개월 기준.
@@ -84,8 +85,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
         summary={[group?.name ?? "전체 지역", bandText(band), SORTS.find((s) => s.value === sort)!.label, ...(hh === "all" ? [] : [`${hh}세대+`])]}
         rail={
           <>
-            <OptionList label="지역" param="g" value={group ? String(group.id) : "all"} cols={2}
-              options={[{ value: "all", label: "전체" }, ...groups.map((g) => ({ value: String(g.id), label: g.name }))]} />
+            <OptionList label="지역" param="g" value={groupValue(group?.id)} cols={2} options={groupOptions(groups)} />
             <OptionList label="전용면적" param="band" value={bandValue(band)} cols={4} options={BAND_OPTIONS} />
             <OptionList label="정렬" param="sort" value={sort} cols={2} options={SORTS} />
             <OptionList label="12개월 매매 최소" param="min" value={min} cols={4} options={MINS} />
@@ -130,10 +130,10 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                       </span>
                     </td>
                     <td className="px-2 text-ink-2">{r.build_year ?? "-"}</td>
-                    <td className="px-2 text-ink-2">{r.households?.toLocaleString("ko-KR") ?? "-"}</td>
+                    <td className="px-2 text-ink-2">{formatCount(r.households)}</td>
                     <td className="px-2 font-medium">{(r.ppa_12m / 10000).toFixed(2)}억</td>
                     <td className="px-2">{formatEok(r.median_12m)}</td>
-                    <td className={`px-2 ${r.chg == null ? "text-muted" : r.chg >= 0 ? "text-up" : "text-down"}`}>{formatPct(r.chg)}</td>
+                    <td className={`px-2 ${toneText[deltaTone(r.chg)]}`}>{formatPct(r.chg)}</td>
                     <td className="px-2">{r.trades_12m}</td>
                     <td className="px-2 text-ink-2">{r.turnover == null ? "-" : `${r.turnover.toFixed(1)}%`}</td>
                     <td className="px-3">
@@ -143,7 +143,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                         </span>
                         <span className="w-12">{r.peakRatio.toFixed(0)}%</span>
                       </div>
-                      <div className="text-[11px] text-muted">{formatEok(r.peak_price)} · {r.peak_date.slice(2, 7).replace("-", ".")}</div>
+                      <div className="text-[11px] text-muted">{formatEok(r.peak_price)} · {shortYm(ymOfDate(r.peak_date))}</div>
                     </td>
                   </tr>
                 ))}

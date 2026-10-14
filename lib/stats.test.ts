@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUnregistered, median, movingAvg, peakRecovery, pctChange, rollingMedian } from "./stats";
+import { isUnregistered, jeonseRatio, median, movingAvg, peakRecovery, pctChange, rollingMedian } from "./stats";
 
 describe("median", () => {
   it("홀수·짝수·빈 배열", () => {
@@ -57,5 +57,17 @@ describe("pctChange", () => {
     expect(pctChange(110, 100)).toBeCloseTo(10);
     expect(pctChange(null, 100)).toBeNull();
     expect(pctChange(100, 0)).toBeNull();
+    expect(pctChange(0, 50000)).toBeNull();
+    expect(pctChange(90, 100)).toBeCloseTo(-10);
+  });
+});
+
+describe("jeonseRatio", () => {
+  it("전세 ÷ 매매 × 100, 둘 중 하나라도 없거나 0이면 null", () => {
+    expect(jeonseRatio(100000, 60000)).toBe(60);
+    expect(jeonseRatio(null, 60000)).toBeNull();
+    expect(jeonseRatio(100000, null)).toBeNull();
+    expect(jeonseRatio(0, 60000)).toBeNull();
+    expect(jeonseRatio(undefined, undefined)).toBeNull();
   });
 });

@@ -3,17 +3,15 @@ import { PeakTable } from "./_components/PeakTable";
 import { RateChart } from "./_components/RateChart";
 import { WeeklyIndexPanel } from "./_components/WeeklyIndexPanel";
 import { TrendTerminal, type TermPoint } from "./_components/TrendTerminal";
-import { Spark, SparkBars, Stat } from "./_components/ui";
+import { Spark, SparkBars, Stat, toneText } from "./_components/ui";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { deltaTone, formatDelta, formatEok, formatYm, shortYm } from "@/lib/format";
 import { findGroup } from "@/lib/params";
 import { getGroups, getTrend } from "@/lib/queries";
-import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
-import { peakRecovery } from "@/lib/stats";
+import { addMonths, currentYm, DATA_START, lastCompleteYm, minYm, monthsBetween, partialFromYm, rangeLabel, resolveRange } from "@/lib/range";
+import { jeonseRatio, pctChange, peakRecovery } from "@/lib/stats";
 
-const ratioOf = (d?: TermPoint) => (d?.trade && d.jeonse ? (d.jeonse / d.trade) * 100 : null);
-const pct = (a?: number | null, b?: number | null) => (a && b ? (a / b - 1) * 100 : null);
-const toneCls = { up: "text-up", down: "text-down", muted: "text-muted" } as const;
+const ratioOf = (d?: TermPoint) => jeonseRatio(d?.trade, d?.jeonse);
 
 export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const sp = await searchParams;
@@ -27,7 +25,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const lastDone = lastCompleteYm();
 
   // 전고점 대비를 위해 보관 기간 전체를 받는다 (1년 전 비교·12개월 스파크라인도 여기서)
-  const fetchFrom = [range.from, DATA_START].sort()[0];
+  const fetchFrom = minYm(range.from, DATA_START);
   const [rows, groupLatest] = await Promise.all([
     getTrend(group.id, band, fetchFrom, range.to),
     Promise.all(groups.map((g) => getTrend(g.id, band, lastDone, lastDone).then((r) => r[0]?.trade_median ?? null))),
@@ -45,6 +43,8 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
     };
   });
   const chart = full.filter((d) => d.ym >= range.from);
+  // 보관 기간엔 거래가 있어도 선택 기간엔 없을 수 있다 (중위가·건수 모두 없을 때만 빈 기간)
+  const chartEmpty = chart.every((d) => d.trade == null && d.jeonse == null && d.tradeCount === 0 && d.jeonseCount === 0);
 
   // 요약: 기간 끝 기준 집계가 끝난 최근 달, 1년 전 같은 달과 비교
   const latest = [...full].reverse().find((d) => !d.partial && d.trade != null);
@@ -53,8 +53,8 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const partialIn12 = last12.filter((d) => d.partial).length;
   const done12 = full.filter((d) => !d.partial).slice(-12);
   const avg = (k: "tradeCount" | "jeonseCount") => Math.round(done12.reduce((s, d) => s + d[k], 0) / Math.max(1, done12.length));
-  const tp = pct(latest?.trade, yearAgo?.trade);
-  const jp = pct(latest?.jeonse, yearAgo?.jeonse);
+  const tp = pctChange(latest?.trade, yearAgo?.trade);
+  const jp = pctChange(latest?.jeonse, yearAgo?.jeonse);
   const rNow = ratioOf(latest), rAgo = ratioOf(yearAgo);
   const fullMonths = full.map((d) => d.ym);
   const peaks = [
@@ -100,7 +100,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
                       {(latest.trade! / 10000).toFixed(2)}<span className="text-lg text-ink-2">억</span>
                     </div>
                     {formatDelta(tp) && (
-                      <div className={`mono mt-1.5 text-xs ${toneCls[deltaTone(tp)]}`}>
+                      <div className={`mono mt-1.5 text-xs ${toneText[deltaTone(tp)]}`}>
                         {formatDelta(tp)} <span className="text-muted">1년 전 {formatEok(yearAgo?.trade)}</span>
                       </div>
                     )}
@@ -137,7 +137,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
             </>
           )}
 
-          {rows.length === 0 ? (
+          {chartEmpty ? (
             <p className="panel py-16 text-center text-sm text-muted">이 조건에 해당하는 거래가 없습니다.</p>
           ) : (
             <TrendTerminal data={chart} title={`${group.name} · ${bandText(band)}`} />
@@ -193,7 +193,7 @@ function MiniStat({ label, value, unit, sub, tone: t }: { label: string; value: 
       <div className="mono mt-0.5 text-[17px] font-semibold">
         {value}<span className="text-xs text-ink-2">{unit}</span>
       </div>
-      {sub && <div className={`mono truncate text-[11px] ${toneCls[t]}`}>{sub}</div>}
+      {sub && <div className={`mono truncate text-[11px] ${toneText[t]}`}>{sub}</div>}
     </div>
   );
 }

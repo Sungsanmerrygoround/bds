@@ -1,13 +1,13 @@
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Legend, SupplyChart, type SupplyPoint } from "../_components/Charts";
 import { SupplyJeonse } from "../_components/SupplyJeonse";
-import { Badge, Card, Stat } from "../_components/ui";
+import { Badge, Card, Stat, toneText } from "../_components/ui";
 import { DEFAULT_BAND } from "@/lib/area";
-import { formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
-import { findGroup, paramStr } from "@/lib/params";
+import { deltaTone, formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
+import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
 import { getGroups, getSupply, getTrend } from "@/lib/queries";
 import { groupColor } from "@/lib/groups";
-import { addMonths, currentYm, DATA_START, lastCompleteYm, monthsBetween, partialIndex } from "@/lib/range";
+import { addMonths, currentYm, DATA_START, lastCompleteYm, maxYm, minYm, monthsBetween, partialIndex } from "@/lib/range";
 import { REACTION_BEFORE, supplyByGroup, supplyReactions } from "@/lib/supply";
 
 const HISTORY_AHEAD = 24; // 입주·전세 칸: 보관 시작 ~ 향후 2년
@@ -33,7 +33,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
   const histTo = addMonths(now, HISTORY_AHEAD);
   // 위쪽 차트(선택 기간)와 아래 입주·전세 칸(보관 시작~향후 2년)을 한 번에 받는다
   const [{ projects: allProjects, manual: allManual }, jeonseRows] = await Promise.all([
-    getSupply([from, DATA_START].sort()[0], [to, histTo].sort()[1]),
+    getSupply(minYm(from, DATA_START), maxYm(to, histTo)),
     Promise.all(groups.map((g) => getTrend(g.id, DEFAULT_BAND, DATA_START, now))),
   ]);
   const projects = allProjects.filter((p) => p.move_in_ym >= from && p.move_in_ym <= to);
@@ -86,7 +86,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
       </p>
       <FilterBar>
         <ParamSelect label="기간" param="w" value={win.value} options={WINDOWS.map((w) => ({ value: w.value, label: w.label }))} />
-        <ParamSelect label="지역" param="g" value={groupId ? String(groupId) : "all"} options={[{ value: "all", label: "전체" }, ...groups.map((g) => ({ value: String(g.id), label: g.name }))]} />
+        <ParamSelect label="지역" param="g" value={groupValue(groupId)} options={groupOptions(groups)} />
         <ParamToggle label="제외된 공고도 목록에 표시" param="excluded" checked={showExcluded} />
       </FilterBar>
 
@@ -112,7 +112,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
             <h3 className="text-sm font-semibold">대규모 입주 전후 전세 변화</h3>
             <p className="mb-2 mt-0.5 text-xs text-muted">
               입주 {offs(REACTION_BEFORE)}개월 전 평균 → 입주 전월~익월 평균. 새 아파트 전세 계약은 입주 1~2개월 전에 몰려서(계약일 기준) 이 구간을 &apos;입주장&apos;으로 봅니다.
-              &apos;지역 흐름 제외&apos;는 같은 기간 다른 4개 지역 평균 변화를 뺀 값입니다.
+              {groups.length > 1 && <>&apos;지역 흐름 제외&apos;는 같은 기간 다른 지역(그 기간 전세 값이 있는 곳) 평균 변화를 뺀 값입니다.</>}
             </p>
             <div className="overflow-x-auto">
               <table className="mono w-full min-w-[620px] text-[13px]">
@@ -136,7 +136,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                       <td>{r.households.toLocaleString()}</td>
                       <td className="text-ink-2">{formatEok(r.before)}</td>
                       <td>{formatEok(r.around)}</td>
-                      <td className={r.change >= 0 ? "text-up" : "text-down"}>{formatPct(r.change)}</td>
+                      <td className={toneText[deltaTone(r.change)]}>{formatPct(r.change)}</td>
                       <td className="text-ink-2">{formatPct(r.others)}</td>
                       <td className={`font-medium ${r.excess == null ? "" : r.excess >= 0 ? "text-up" : "text-down"}`}>
                         {r.excess == null ? "-" : `${r.excess >= 0 ? "+" : ""}${r.excess.toFixed(1)}%p`}

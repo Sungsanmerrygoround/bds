@@ -189,14 +189,47 @@ export function OptionList({ label, param, value, options, cols = 3 }: {
 const ymToInput = (ym: string) => `${ym.slice(0, 4)}-${ym.slice(4, 6)}`;
 const inputToYm = (v: string) => v.replace("-", "");
 
-/** 기간: 프리셋 목록 + 직접 지정(월 단위) */
-export function RangeList({ rangeKey, from, to, max }: { rangeKey: string; from: string; to: string; max: string }) {
+interface RangeProps {
+  rangeKey: string;
+  from: string;
+  to: string;
+  max: string;
+}
+
+/**
+ * 기간: 프리셋 목록 + 직접 지정(월 단위).
+ * 기간이 바뀌면(서버 응답 도착) 직접 지정 열림 여부와 입력칸을 새 기간에 맞춘다. 단 응답을 기다리는 사이 사용자가
+ * 직접 지정을 열었거나 입력칸을 고쳤으면 그 상태는 그대로 둔다 (먼저 누른 프리셋 응답이 입력 중인 값을 지우지 않게).
+ */
+export function RangeList({ rangeKey, from, to, max }: RangeProps) {
   const { setParams, valueOf } = useFilters();
   const [custom, setCustom] = useState(rangeKey === "custom");
   const activeKey = valueOf("from", null) ? "custom" : (valueOf("range", rangeKey) ?? rangeKey);
   const [f, setF] = useState(ymToInput(from));
   const [t, setT] = useState(ymToInput(to));
   const span = `${shortYm(from)}–${shortYm(to)}`;
+
+  // 마지막으로 맞춘 기간과, 그 뒤 사용자가 직접 지정을 열었는지·입력칸을 고쳤는지
+  const syncKey = `${rangeKey}:${from}:${to}`;
+  const [synced, setSynced] = useState(syncKey);
+  const [opened, setOpened] = useState(false);
+  const [typed, setTyped] = useState(false);
+  if (synced !== syncKey) {
+    // 렌더 중 이전 값과 비교해 상태 맞추기 (React 문서의 '이전 렌더의 정보 저장' 방식)
+    setSynced(syncKey);
+    if (!opened) setCustom(rangeKey === "custom");
+    if (!typed) {
+      setF(ymToInput(from));
+      setT(ymToInput(to));
+    }
+    setOpened(false);
+    setTyped(false);
+  }
+  const navigate = (u: Updates) => {
+    setOpened(false);
+    setTyped(false);
+    setParams(u);
+  };
 
   return (
     <div className="flex flex-col">
@@ -211,7 +244,7 @@ export function RangeList({ rangeKey, from, to, max }: { rangeKey: string; from:
               className={optCls(on)}
               onClick={() => {
                 setCustom(false);
-                setParams({ range: p.key, from: null, to: null });
+                navigate({ range: p.key, from: null, to: null });
               }}
             >
               {p.label}
@@ -219,7 +252,10 @@ export function RangeList({ rangeKey, from, to, max }: { rangeKey: string; from:
             </button>
           );
         })}
-        <button type="button" aria-pressed={custom} className={optCls(custom)} onClick={() => setCustom(true)}>
+        <button type="button" aria-pressed={custom} className={optCls(custom)} onClick={() => {
+          setCustom(true);
+          setOpened(true);
+        }}>
           직접 지정
           {custom && activeKey === "custom" && <span className="mono hidden text-[11px] text-muted lg:inline">{span}</span>}
         </button>
@@ -229,16 +265,22 @@ export function RangeList({ rangeKey, from, to, max }: { rangeKey: string; from:
           className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-1 lg:px-2.5"
           onSubmit={(e) => {
             e.preventDefault();
-            if (f && t && f <= t) setParams({ range: null, from: inputToYm(f), to: inputToYm(t) });
+            if (f && t && f <= t) navigate({ range: null, from: inputToYm(f), to: inputToYm(t) });
           }}
         >
           <label className="flex flex-col gap-1 text-xs text-muted">
             시작 월
-            <input type="month" value={f} max={ymToInput(max)} onChange={(e) => setF(e.target.value)} className={inputCls} />
+            <input type="month" value={f} max={ymToInput(max)} onChange={(e) => {
+              setF(e.target.value);
+              setTyped(true);
+            }} className={inputCls} />
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted">
             끝 월
-            <input type="month" value={t} max={ymToInput(max)} onChange={(e) => setT(e.target.value)} className={inputCls} />
+            <input type="month" value={t} max={ymToInput(max)} onChange={(e) => {
+              setT(e.target.value);
+              setTyped(true);
+            }} className={inputCls} />
           </label>
           <button type="submit" disabled={!f || !t || f > t} className="col-span-2 min-h-10 rounded bg-s1 text-sm font-semibold text-page disabled:opacity-40 lg:col-span-1">
             적용

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { complexFacts, deltaTone, formatDelta, formatHouseholds, signedPct } from "./format";
+import { complexFacts, deltaTone, formatCount, formatDelta, formatHouseholds, shortDate, signedPct } from "./format";
 
 describe("단지 기본정보 표시", () => {
   it("formatHouseholds", () => {
@@ -30,5 +30,17 @@ describe("변동 표시", () => {
     expect(formatDelta(0)).toBe("▲ +0.0%");
     expect(formatDelta(null)).toBeNull();
     expect([deltaTone(0), deltaTone(-0.1), deltaTone(null)]).toEqual(["up", "down", "muted"]);
+  });
+});
+
+describe("짧은 표시", () => {
+  it("formatCount: 천 단위 쉼표, 없으면 -", () => {
+    expect(formatCount(1234)).toBe("1,234");
+    expect(formatCount(0)).toBe("0");
+    expect(formatCount(null)).toBe("-");
+    expect(formatCount(undefined)).toBe("-");
+  });
+  it("shortDate", () => {
+    expect(shortDate("2026-09-18")).toBe("26.09.18");
   });
 });

@@ -1,5 +1,6 @@
 import "server-only";
-import { check, db } from "./db";
+import { db } from "./db";
+import { check, selectAll } from "./supa";
 
 export interface RegionGroup {
   id: number;
@@ -170,17 +171,8 @@ export interface ComplexRent {
 }
 
 /** 단지 거래는 수백~수천 건이라 range로 끝까지 받는다 */
-async function all<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>, what: string): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += 1000) {
-    const rows = (check(await build(from, from + 999), what) ?? []) as T[];
-    out.push(...rows);
-    if (rows.length < 1000) return out;
-  }
-}
-
 export async function getComplexTrades(aptSeq: string, from: string, to: string): Promise<ComplexTrade[]> {
-  return all<ComplexTrade>(
+  return selectAll<ComplexTrade>(
     (a, b) =>
       db()
         .from("apt_trades")
@@ -196,7 +188,7 @@ export async function getComplexTrades(aptSeq: string, from: string, to: string)
 }
 
 export async function getComplexRents(aptSeq: string, from: string, to: string): Promise<ComplexRent[]> {
-  return all<ComplexRent>(
+  return selectAll<ComplexRent>(
     (a, b) =>
       db()
         .from("apt_rents")
@@ -409,7 +401,7 @@ export interface WeeklyIndexRow {
 
 /** from·to는 YYYY-MM-DD. 여러 구 × 2종 × 5년이면 천 행이 넘어 나눠 받는다. */
 export async function getWeeklyIndex(regionIds: number[], kinds: ("sale" | "jeonse")[], from: string, to: string): Promise<WeeklyIndexRow[]> {
-  const rows = await all<WeeklyIndexRow>(
+  const rows = await selectAll<WeeklyIndexRow>(
     (a, b) =>
       db()
         .from("price_index_weekly")

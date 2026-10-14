@@ -182,9 +182,5 @@ export async function runKapt(args: Args) {
       note: pending > 0 || halted ? `K-apt 기본정보 ${pending}개 남음${halted ? " (연속 실패로 중단)" : ""}` : undefined,
     };
   };
-  if (args.dry) {
-    await work({ calls: 0 });
-    return;
-  }
-  await recordRun(db, "kapt", "kapt", work);
+  await recordRun(db, args, "kapt", work);
 }

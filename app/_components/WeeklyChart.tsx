@@ -4,8 +4,8 @@ import { useState, type ReactNode } from "react";
 import { changePct, linearY, niceTicks, seriesPaths, weekScale } from "@/lib/chart";
 import { signedPct } from "@/lib/format";
 import {
-  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, GridLines, HoverDot, pointerSelect, readoutRow,
-  Swatch, Tag, useWidth, YearMarks,
+  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, GridLines, HoverDot, lastTags, pointerSelect, readoutRow,
+  Swatch, useWidth, XAxis, YearMarks,
 } from "./chartKit";
 
 // 주간 지수 선 차트 (부동산원). 주간 지수는 발표되면 확정이라 "집계 중" 점선이 없다.
@@ -39,7 +39,7 @@ export function WeeklyChart({ title, unit, note, weeks, series, height = 200, ch
   const h = hover ?? n - 1;
 
   const layout = axisLayout(w);
-  const { L0, R0, font } = layout;
+  const { L0, R0 } = layout;
   const ts = weekScale(weeks, w, L0, R0);
   const pointer = pointerSelect(setHover, L0, ts.slot, n);
 
@@ -48,13 +48,7 @@ export function WeeklyChart({ title, unit, note, weeks, series, height = 200, ch
   const y = linearY(ticks, T, height, B);
   const hx = ts.X(h);
 
-  // 오른쪽 태그: 계열별 최근 값
-  const tags = series
-    .map((s) => {
-      const i = s.values.findLastIndex((v) => v != null);
-      return i < 0 ? null : { key: s.key, value: s.values[i]!, color: s.color };
-    })
-    .filter((t) => t != null);
+  const tags = lastTags(series); // 오른쪽 태그: 계열별 최근 값
 
   return (
     <section className={chartPanel}>
@@ -84,12 +78,7 @@ export function WeeklyChart({ title, unit, note, weeks, series, height = 200, ch
               {series.map((s) => (s.values[h] == null ? null : <HoverDot key={s.key} x={hx} y={y(s.values[h]!)} color={s.color} />))}
               <AxisTags items={tags} y={y} height={height} ticks={ticks} fmtTick={fmt} fmtTag={fmt} w={w} layout={layout} />
             </svg>
-            <svg width={w} height={XH} className="block" aria-hidden="true">
-              {ts.xTicks.map((t) => (
-                <text key={t.i} x={ts.X(t.i)} y={16} textAnchor="middle" className="mono" fontSize={font} fill="var(--muted)">{t.label}</text>
-              ))}
-              <Tag x={Math.min(Math.max(hx - 27, 0), w - 54)} y={12} text={`${weeks[h].slice(5, 7)}.${weeks[h].slice(8)}`} bg="var(--tag)" fg="var(--ink)" font={font} />
-            </svg>
+            <XAxis ts={ts} w={w} h={h} label={`${weeks[h].slice(5, 7)}.${weeks[h].slice(8)}`} layout={layout} height={XH} />
           </>
         )}
         {all.length === 0 && <p className="py-12 text-center text-sm text-muted">표시할 값이 없습니다.</p>}

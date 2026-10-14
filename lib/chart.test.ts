@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { changePct, linearY, monotoneSlopes, niceTicks, rebase, runs, seriesPaths, spreadLabels, toIndex, weekScale } from "./chart";
+import { changePct, linearY, monotoneSlopes, niceTicks, rebase, runs, seriesPaths, spreadLabels, timeScale, toIndex, weekScale } from "./chart";
+import { monthsBetween } from "./range";
 
 describe("chart", () => {
   it("niceTicks: 1·2·5 간격, 범위를 감싼다", () => {
@@ -93,5 +94,44 @@ describe("linearY", () => {
     // 기존 식과 같은 값
     const t = [2.5, 3, 3.5], T = 22, H = 180, B = 6;
     for (const v of [2.5, 2.75, 3.1, 3.5]) expect(linearY(t, T, H, B)(v)).toBe(T + (H - T - B) * (1 - (v - t[0]) / (t[t.length - 1] - t[0])));
+  });
+});
+
+describe("timeScale (월 단위 시간축)", () => {
+  it("넓으면 매달 눈금(\"n월\"), 1월에 연도 구분, 첫 연도 라벨은 다음 1월과 48px 이상 떨어질 때만", () => {
+    // 12개월, 폭 542px → 한 달 49px ≥ 44 → 매달
+    const s = timeScale(monthsBetween("202510", "202609"), 600, 12, 46);
+    expect(s.n).toBe(12);
+    expect(s.slot).toBeCloseTo(542 / 11);
+    expect(s.X(0)).toBe(12);
+    expect(s.X(11)).toBeCloseTo(554);
+    expect(s.xTicks.map((t) => t.label)).toEqual(["10월", "11월", "12월", "1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월"]);
+    expect(s.jans).toEqual([3]);
+    expect(s.yearLabels).toEqual([{ i: 0, label: "2025" }, { i: 3, label: "2026" }]);
+  });
+  it("3개월 간격: 한 달 15px → 3개월 46px", () => {
+    const s = timeScale(monthsBetween("202110", "202610"), 1000, 10, 66);
+    expect(s.xTicks.slice(0, 4)).toEqual([{ i: 0, label: "10월" }, { i: 3, label: "1월" }, { i: 6, label: "4월" }, { i: 9, label: "7월" }]);
+    expect(s.jans).toEqual([3, 15, 27, 39, 51]);
+  });
+  it("좁으면 12개월 간격 \"연.월\" 라벨, 첫 1월이 너무 가까우면 맨 앞 연도 라벨 생략", () => {
+    const s = timeScale(monthsBetween("202110", "202610"), 360, 12, 46);
+    expect(s.xTicks).toEqual([
+      { i: 3, label: "22.01" }, { i: 15, label: "23.01" }, { i: 27, label: "24.01" }, { i: 39, label: "25.01" }, { i: 51, label: "26.01" },
+    ]);
+    expect(s.yearLabels.map((y) => y.label)).toEqual(["2022", "2023", "2024", "2025", "2026"]);
+  });
+  it("한 달뿐이면 가운데, 연도 라벨은 그 달", () => {
+    const s = timeScale(["202609"], 1000, 10, 66);
+    expect(s.X(0)).toBe(472);
+    expect(s.xTicks).toEqual([{ i: 0, label: "9월" }]);
+    expect(s.jans).toEqual([]);
+    expect(s.yearLabels).toEqual([{ i: 0, label: "2026" }]);
+  });
+  it("주 단위: 해를 넘기는 두 주 — 둘째 주가 새 달·새해 첫 주", () => {
+    const s = weekScale(["2025-12-29", "2026-01-05"], 1000, 10, 66);
+    expect(s.xTicks).toEqual([{ i: 1, label: "1월" }]);
+    expect(s.jans).toEqual([1]);
+    expect(s.yearLabels).toEqual([{ i: 0, label: "2025" }, { i: 1, label: "2026" }]);
   });
 });

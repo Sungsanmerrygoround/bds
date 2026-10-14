@@ -2,8 +2,10 @@ import Link from "next/link";
 import { FavButton } from "../_components/FavButton";
 import { Badge } from "../_components/ui";
 import { getFavorites } from "@/lib/favorites";
-import { formatEok, formatHouseholds, formatPct } from "@/lib/format";
+import { formatCount, formatEok, formatHouseholds, formatPct, shortDate, shortYm } from "@/lib/format";
 import { getComplexInfo, getComplexStats, type ComplexStats } from "@/lib/queries";
+import { ymOfDate } from "@/lib/range";
+import { jeonseRatio } from "@/lib/stats";
 
 // 관심 단지: 이 브라우저에 저장한 단지들의 최근 흐름을 한 화면에.
 // 단지마다 최근 2년 매매가 가장 많은 전용면적 하나를 기준으로 요약한다.
@@ -14,7 +16,7 @@ function derive(s: ComplexStats) {
   const current = s.trade_median_6m ?? s.last_price;
   return {
     current,
-    ratio: s.trade_median_6m && s.jeonse_median_6m ? (s.jeonse_median_6m / s.trade_median_6m) * 100 : null,
+    ratio: jeonseRatio(s.trade_median_6m, s.jeonse_median_6m),
     peakRatio: current && s.peak_price ? (current / s.peak_price) * 100 : null,
   };
 }
@@ -26,7 +28,7 @@ function EventBadge({ s }: { s: ComplexStats }) {
       {s.event_type === "NEW_HIGH"
         ? <Badge tone="up">▲ 신고가 {formatPct(Number(s.event_pct))}</Badge>
         : <Badge tone="down">▼ 하락 {formatPct(Number(s.event_pct))}</Badge>}
-      <span className="ml-1 text-[11px] text-muted">{s.event_date?.slice(2).replace(/-/g, ".")}</span>
+      <span className="ml-1 text-[11px] text-muted">{s.event_date && shortDate(s.event_date)}</span>
     </span>
   );
 }
@@ -37,6 +39,9 @@ export default async function WatchPage() {
   const hhOf = (s: ComplexStats) => infos.get(s.apt_seq)?.households ?? null;
   const order = new Map(favs.map((s, i) => [s, i]));
   const rows = stats.sort((a, b) => order.get(a.apt_seq)! - order.get(b.apt_seq)!);
+  // 쿠키에는 있지만 DB에 없는 단지 (수집 지역에서 빠진 단지 등): 목록에 안 보여서 해제할 길이 없으므로 따로 보여 준다
+  const have = new Set(rows.map((r) => r.apt_seq));
+  const missing = favs.filter((seq) => !have.has(seq));
   const compareHref = `/complex/compare?ids=${rows.slice(0, COMPARE_MAX).map((r) => encodeURIComponent(r.apt_seq)).join(",")}`;
   const href = (s: ComplexStats) => `/complex/${encodeURIComponent(s.apt_seq)}${s.area_type ? `?area=${s.area_type}` : ""}`;
 
@@ -46,7 +51,7 @@ export default async function WatchPage() {
         <div>
           <h1 className="text-2xl font-semibold">관심 단지</h1>
           <p className="mt-1 text-sm text-ink-2">
-            ★로 저장한 단지 {rows.length}개. 이 브라우저에만 저장됩니다.
+            ★로 저장한 단지 {favs.length}개{missing.length > 0 && ` (${missing.length}개는 데이터 없음)`}. 이 브라우저에만 저장됩니다.
             <span className="text-muted"> 단지마다 최근 2년 매매가 가장 많은 면적 기준, 중위가는 최근 6개월.</span>
           </p>
         </div>
@@ -57,7 +62,7 @@ export default async function WatchPage() {
         )}
       </div>
 
-      {rows.length === 0 ? (
+      {favs.length === 0 ? (
         <div className="panel px-6 py-14 text-center text-sm text-ink-2">
           <p>아직 관심 단지가 없습니다.</p>
           <p className="mt-1 text-muted">단지 화면이나 순위표에서 ☆를 누르면 여기에 모입니다.</p>
@@ -66,7 +71,7 @@ export default async function WatchPage() {
             <Link href="/complex" className="rounded border border-line px-3 py-2 hover:bg-wash">단지 검색</Link>
           </div>
         </div>
-      ) : (
+      ) : rows.length === 0 ? null : (
         <>
           {/* 좁은 화면: 카드 */}
           <div className="flex flex-col gap-3 sm:hidden">
@@ -125,7 +130,7 @@ export default async function WatchPage() {
                           </span>
                         </span>
                       </td>
-                      <td className="px-2 text-ink-2">{hhOf(s)?.toLocaleString("ko-KR") ?? "-"}</td>
+                      <td className="px-2 text-ink-2">{formatCount(hhOf(s))}</td>
                       <td className="px-2">{s.area_type ?? "-"}㎡</td>
                       <td className="px-2">
                         <div className="font-medium">{formatEok(s.last_price)}</div>
@@ -136,7 +141,7 @@ export default async function WatchPage() {
                       <td className="px-2">{d.ratio == null ? "-" : `${d.ratio.toFixed(0)}%`}</td>
                       <td className="px-2" title={s.peak_price ? `최고가 ${formatEok(s.peak_price)} (${s.peak_date})` : undefined}>
                         <div>{d.peakRatio == null ? "-" : `${d.peakRatio.toFixed(0)}%`}</div>
-                        {s.peak_price && <div className="text-[11px] text-muted">{formatEok(s.peak_price)} · {s.peak_date?.slice(2, 7).replace("-", ".")}</div>}
+                        {s.peak_price && <div className="text-[11px] text-muted">{formatEok(s.peak_price)} · {s.peak_date && shortYm(ymOfDate(s.peak_date))}</div>}
                       </td>
                       <td className="px-3 text-left"><EventBadge s={s} /></td>
                     </tr>
@@ -146,6 +151,18 @@ export default async function WatchPage() {
             </table>
           </div>
         </>
+      )}
+
+      {missing.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted" data-testid="fav-missing">
+          <span>지금은 데이터가 없는 단지 {missing.length}개 (수집 지역에서 빠진 단지 등):</span>
+          {missing.map((seq) => (
+            <span key={seq} className="mono inline-flex items-center">
+              {seq}
+              <FavButton aptSeq={seq} on name={seq} />
+            </span>
+          ))}
+        </div>
       )}
     </>
   );

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { addMonths, currentYm, lastCompleteYm, monthEnd, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel, recentMonths, resolveRange } from "./range";
+import {
+  addMonths, currentYm, lastCompleteYm, maxYm, minYm, monthEnd, monthsAgo, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel,
+  recentMonths, resolveRange, ymOfDate,
+} from "./range";
 
 // 2026-09-28 10:00 KST
 const now = new Date("2026-09-28T01:00:00Z");
@@ -76,5 +79,30 @@ describe("recentMonths", () => {
     for (const at of ["2026-09-28T01:00:00Z", "2025-12-31T15:30:00Z", "2026-02-28T20:00:00Z", "2024-02-29T03:00:00Z"]) {
       for (const n of [1, 3, 9, 36, 61]) expect(recentMonths(n, new Date(at))).toEqual(old(n, new Date(at)));
     }
+  });
+});
+
+describe("ymOfDate · minYm · maxYm", () => {
+  it("날짜 → 달, 이른 달·늦은 달", () => {
+    expect(ymOfDate("2026-09-18")).toBe("202609");
+    expect(minYm("202310", "202110")).toBe("202110");
+    expect(maxYm("202310", "202110")).toBe("202310");
+    expect(minYm("202501", "202501")).toBe("202501");
+  });
+});
+
+describe("monthsAgo", () => {
+  it("KST 오늘 기준 n개월 전 같은 날", () => {
+    expect(monthsAgo(3, now)).toBe("2026-06-28");
+    expect(monthsAgo(12, now)).toBe("2025-09-28");
+    // UTC로는 아직 9/30이지만 KST는 10/1
+    expect(monthsAgo(1, new Date("2026-09-30T16:00:00Z"))).toBe("2026-09-01");
+  });
+  it("그 달에 같은 날이 없으면 말일 (setMonth처럼 다음 달로 넘치지 않음)", () => {
+    expect(monthsAgo(1, new Date("2026-10-31T03:00:00Z"))).toBe("2026-09-30");
+    expect(monthsAgo(1, new Date("2026-03-31T03:00:00Z"))).toBe("2026-02-28");
+    expect(monthsAgo(1, new Date("2028-03-30T03:00:00Z"))).toBe("2028-02-29");
+    expect(monthsAgo(6, new Date("2026-08-31T03:00:00Z"))).toBe("2026-02-28");
+    expect(monthsAgo(1, new Date("2026-01-15T03:00:00Z"))).toBe("2025-12-15");
   });
 });

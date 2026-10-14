@@ -6,21 +6,15 @@
 // K-apt는 의무관리 대상(대략 150세대 이상)만 있어서 소규모 단지는 짝이 없는 게 정상이다.
 
 import { requireEnv } from "./env";
-import { FatalApiError, requestWithRetry, type CallCounter } from "./http";
+import { dataGoKrError, dataGoKrXmlError, requestWithRetry, type CallCounter } from "./http";
 import { str } from "./normalize";
 
 const BASE = "https://apis.data.go.kr/1613000";
-const FATAL_CODES = new Set(["20", "22", "30", "31", "32", "33"]);
 
 type Item = Record<string, string | number | null | undefined>;
 
 export function parseKapt(text: string): { items: Item[]; totalCount: number } {
-  if (text.trimStart().startsWith("<")) {
-    const code = /<returnReasonCode>(\w+)/.exec(text)?.[1] ?? /<resultCode>(\w+)/.exec(text)?.[1] ?? "?";
-    const msg = /<returnAuthMsg>([^<]+)/.exec(text)?.[1] ?? /<resultMsg>([^<]+)/.exec(text)?.[1] ?? text.slice(0, 200);
-    const Err = FATAL_CODES.has(code) ? FatalApiError : Error;
-    throw new Err(`K-apt 오류 ${code}: ${msg}`);
-  }
+  if (text.trimStart().startsWith("<")) throw dataGoKrXmlError(text, "K-apt 오류");
   let json: {
     response?: { header?: { resultCode?: string; resultMsg?: string }; body?: { items?: unknown; item?: unknown; totalCount?: number } };
     OpenAPI_ServiceResponse?: { cmmMsgHeader?: { returnReasonCode?: string; returnAuthMsg?: string; errMsg?: string } };
@@ -32,15 +26,9 @@ export function parseKapt(text: string): { items: Item[]; totalCount: number } {
   }
   // 게이트웨이 오류는 JSON으로도 온다 (2026-10-11: 04 HTTP_ERROR = 제공 기관 서버 오류, 재시도 대상)
   const gw = json.OpenAPI_ServiceResponse?.cmmMsgHeader;
-  if (gw) {
-    const Err = FATAL_CODES.has(String(gw.returnReasonCode)) ? FatalApiError : Error;
-    throw new Err(`K-apt 오류 ${gw.returnReasonCode}: ${gw.returnAuthMsg ?? gw.errMsg}`);
-  }
+  if (gw) throw dataGoKrError(gw.returnReasonCode, gw.returnAuthMsg ?? gw.errMsg, "K-apt 오류");
   const header = json.response?.header;
-  if (header?.resultCode !== "00") {
-    const Err = FATAL_CODES.has(String(header?.resultCode)) ? FatalApiError : Error;
-    throw new Err(`K-apt 오류 ${header?.resultCode}: ${header?.resultMsg}`);
-  }
+  if (header?.resultCode !== "00") throw dataGoKrError(header?.resultCode, header?.resultMsg, "K-apt 오류");
   const body = json.response?.body ?? {};
   const raw = body.items ?? body.item;
   const list = raw == null || raw === "" ? [] : Array.isArray(raw) ? raw : [raw];

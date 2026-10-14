@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { linearY, niceTicks } from "@/lib/chart";
-import { longYm, signedPct } from "@/lib/format";
+import { linearY, niceTicks, timeScale } from "@/lib/chart";
+import { longYm, shortYm, signedPct } from "@/lib/format";
 import {
-  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow,
-  SeriesLine, Swatch, timeScale, useWidth, XAxis, YearMarks,
+  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, lastTags, pointerSelect, readoutRow,
+  SeriesLine, Swatch, useWidth, XAxis, YearMarks,
 } from "./chartKit";
 
 // 월별 지표 선 차트 (전세 갱신 등). 같은 단위의 계열만 한 차트에 — 단위가 다르면 차트를 나눈다.
@@ -60,13 +60,7 @@ export function MetricChart({ title, unit, note, months, partialFrom, partialLab
   const y = linearY(ticks, T, height, B);
   const hx = ts.X(h);
 
-  // 오른쪽 태그: 계열별 집계 끝난 최근 값
-  const tags = series
-    .map((s) => {
-      const i = s.values.slice(0, lastDone + 1).findLastIndex((v) => v != null);
-      return i < 0 ? null : { key: s.key, value: s.values[i]!, color: s.color };
-    })
-    .filter((t) => t != null);
+  const tags = lastTags(series, lastDone); // 오른쪽 태그: 계열별 집계 끝난 최근 값
 
   return (
     <section className={chartPanel}>
@@ -90,7 +84,7 @@ export function MetricChart({ title, unit, note, months, partialFrom, partialLab
               {series.map((s) => (s.values[h] == null ? null : <HoverDot key={s.key} x={hx} y={y(s.values[h]!)} color={s.color} />))}
               <AxisTags items={tags} y={y} height={height} ticks={ticks} fmtTick={fmt} fmtTag={fmt} w={w} layout={layout} />
             </svg>
-            <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
+            <XAxis ts={ts} w={w} h={h} label={shortYm(months[h])} layout={layout} height={XH} />
           </>
         )}
         {all.length === 0 && <p className="py-12 text-center text-sm text-muted">표시할 값이 없습니다.</p>}

@@ -16,6 +16,9 @@ export function Card({ title, subtitle, right, children }: { title: ReactNode; s
   );
 }
 
+/** 변동 방향(deltaTone) → 글자색 */
+export const toneText = { up: "text-up", down: "text-down", muted: "text-muted" } as const;
+
 export function Stat({ label, value, unit, sub, subTone, children }: {
   label: string;
   value: string;
@@ -24,7 +27,6 @@ export function Stat({ label, value, unit, sub, subTone, children }: {
   subTone?: "up" | "down" | "muted";
   children?: ReactNode;
 }) {
-  const tone = subTone === "up" ? "text-up" : subTone === "down" ? "text-down" : "text-muted";
   return (
     <div className="panel flex min-w-0 flex-col gap-1 px-4 pb-3 pt-3.5">
       <div className="cap truncate">{label}</div>
@@ -32,7 +34,7 @@ export function Stat({ label, value, unit, sub, subTone, children }: {
         {value}
         {unit && <span className="text-[15px] text-ink-2">{unit}</span>}
       </div>
-      {sub && <div className={`mono text-xs ${tone}`}>{sub}</div>}
+      {sub && <div className={`mono text-xs ${toneText[subTone ?? "muted"]}`}>{sub}</div>}
       {children && <div className="mt-1.5">{children}</div>}
     </div>
   );

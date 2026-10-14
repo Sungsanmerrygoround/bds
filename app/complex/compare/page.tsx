@@ -2,24 +2,25 @@ import Link from "next/link";
 import { CompareCharts, type CompareSeries } from "../../_components/CompareCharts";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
-import { getFavorites, isValidAptSeq } from "@/lib/favorites";
-import { formatEok, formatYm } from "@/lib/format";
+import { getFavorites } from "@/lib/favorites";
+import { formatCount, formatEok, formatYm } from "@/lib/format";
 import { groupColor } from "@/lib/groups";
-import { paramStr } from "@/lib/params";
+import { isAptSeq, paramStr } from "@/lib/params";
 import { getComplexes, getComplexInfo, getComplexRents, getComplexTrades, searchComplexes } from "@/lib/queries";
-import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
-import { median, rollingMedian } from "@/lib/stats";
+import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialIndex, rangeLabel, resolveRange, ymOfDate } from "@/lib/range";
+import { jeonseRatio, median, rollingMedian } from "@/lib/stats";
 
 // 단지 비교: 최대 5개 단지의 같은 면적 구간 가격을 한 차트에.
 // 단지는 한 달 거래가 적어 달마다 '그 달 포함 최근 3개월 거래의 중위값'으로 그린다.
 
 const MAX = 5;
-const ymOf = (date: string) => date.slice(0, 4) + date.slice(5, 7);
+
+const pctText = (v: number | null) => (v == null ? "-" : `${Math.round(v)}%`);
 
 export default async function ComplexComparePage({ searchParams }: PageProps<"/complex/compare">) {
   const sp = await searchParams;
   const str = (k: string) => paramStr(sp[k]);
-  const ids = [...new Set((str("ids") ?? "").split(",").filter(isValidAptSeq))].slice(0, MAX);
+  const ids = [...new Set((str("ids") ?? "").split(",").filter(isAptSeq))].slice(0, MAX);
   const range = resolveRange(sp);
   const band = parseBand(sp.band);
   const metric = str("metric") === "jeonse" ? "jeonse" : "trade";
@@ -48,15 +49,15 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
     const [trades, rents] = data[ids.indexOf(id)];
     const t = trades.filter((r) => !r.is_cancelled && !r.missing_since && inBand(r.area_band));
     const j = rents.filter((r) => r.rent_type === "전세" && inBand(r.area_band));
-    const deals = metric === "trade" ? t.map((r) => ({ ym: ymOf(r.deal_date), price: r.price_man })) : j.map((r) => ({ ym: ymOf(r.deal_date), price: r.deposit_man }));
+    const deals = metric === "trade" ? t.map((r) => ({ ym: ymOfDate(r.deal_date), price: r.price_man })) : j.map((r) => ({ ym: ymOfDate(r.deal_date), price: r.deposit_man }));
     const rolled = rollingMedian(windowMonths, deals).slice(2);
     const counts = months.map((m) => deals.filter((d) => d.ym === m).length);
-    const tr = t.filter((r) => ymOf(r.deal_date) >= range.from);
-    const isRecent = (r: { deal_date: string }) => ymOf(r.deal_date) >= recentFrom && ymOf(r.deal_date) <= lastDone;
+    const tr = t.filter((r) => ymOfDate(r.deal_date) >= range.from);
+    const isRecent = (r: { deal_date: string }) => ymOfDate(r.deal_date) >= recentFrom && ymOfDate(r.deal_date) <= lastDone;
     const recentTrade = median(t.filter(isRecent).map((r) => r.price_man));
     const recentJeonse = median(j.filter(isRecent).map((r) => r.deposit_man));
     const peak = tr.reduce<typeof t[number] | null>((m, r) => (!m || r.price_man > m.price_man ? r : m), null);
-    return { id, c: byId.get(id)!, rolled, counts, tradeN: tr.length, jeonseN: j.filter((r) => ymOf(r.deal_date) >= range.from).length, last: t[0], recentTrade, recentJeonse, peak };
+    return { id, c: byId.get(id)!, rolled, counts, tradeN: tr.length, jeonseN: j.filter((r) => ymOfDate(r.deal_date) >= range.from).length, last: t[0], recentTrade, recentJeonse, peak };
   });
 
   const series: CompareSeries[] = rows.map((r, i) => ({ id: r.id, name: r.c.apt_nm, color: groupColor(i), price: r.rolled, count: r.counts }));
@@ -170,7 +171,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
                         <span className="ml-1.5 text-xs text-muted">{r.c.regions.sigungu_name} {r.c.umd_nm}</span>
                       </td>
                       <td className="px-2 text-ink-2">{r.c.build_year ?? "-"}</td>
-                      <td className="px-2 text-ink-2">{infos.get(r.id)?.households?.toLocaleString("ko-KR") ?? "-"}</td>
+                      <td className="px-2 text-ink-2">{formatCount(infos.get(r.id)?.households)}</td>
                       <td className="px-2">{r.tradeN} / {r.jeonseN}</td>
                       <td className="px-2">
                         {formatEok(r.last?.price_man)}
@@ -178,7 +179,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
                       </td>
                       <td className="px-2 font-medium">{formatEok(r.recentTrade)}</td>
                       <td className="px-2">{formatEok(r.recentJeonse)}</td>
-                      <td className="px-2">{r.recentTrade && r.recentJeonse ? `${Math.round((r.recentJeonse / r.recentTrade) * 100)}%` : "-"}</td>
+                      <td className="px-2">{pctText(jeonseRatio(r.recentTrade, r.recentJeonse))}</td>
                       <td className="px-3">
                         {formatEok(r.peak?.price_man)}
                         {r.peak && <div className="text-[11px] text-muted">{r.peak.deal_date}</div>}

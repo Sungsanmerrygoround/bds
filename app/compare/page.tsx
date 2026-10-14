@@ -7,7 +7,7 @@ import { formatEok, formatYm, shortYm } from "@/lib/format";
 import { groupColor } from "@/lib/groups";
 import { rebase } from "@/lib/chart";
 import { getGroups, getTrend, getWeeklyIndex } from "@/lib/queries";
-import { currentYm, DATA_START, lastCompleteYm, monthEnd, monthsBetween, monthStart, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
+import { currentYm, DATA_START, lastCompleteYm, minYm, monthEnd, monthsBetween, monthStart, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 import { peakRecovery } from "@/lib/stats";
 
 export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
@@ -18,7 +18,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
 
   const groups = await getGroups();
   // 전고점 대비를 위해 보관 기간 전체를 받고, 차트는 기간만 쓴다
-  const histFrom = [range.from, DATA_START].sort()[0];
+  const histFrom = minYm(range.from, DATA_START);
   const trends = await Promise.all(groups.map((g) => getTrend(g.id, band, histFrom, range.to)));
   const histMonths = monthsBetween(histFrom, range.to);
   const lastDone = lastCompleteYm();

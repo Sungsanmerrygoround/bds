@@ -60,5 +60,8 @@ export function isUnregistered(t: { deal_date: string; rgst_date: string | null;
   return (Date.parse(today) - Date.parse(t.deal_date)) / 86_400_000 > UNREGISTERED_DAYS;
 }
 
-/** a/b − 1 (%). 둘 중 하나가 없으면 null */
-export const pctChange = (a: number | null | undefined, b: number | null | undefined) => (a != null && b ? (a / b - 1) * 100 : null);
+/** a/b − 1 (%). 둘 중 하나가 없거나 0이면 null (가격 0은 값 없음) */
+export const pctChange = (a: number | null | undefined, b: number | null | undefined) => (a && b ? (a / b - 1) * 100 : null);
+
+/** 전세가율(%) = 전세 ÷ 매매 × 100. 둘 중 하나가 없거나 0이면 null */
+export const jeonseRatio = (trade: number | null | undefined, jeonse: number | null | undefined) => (trade && jeonse ? (jeonse / trade) * 100 : null);

@@ -32,9 +32,5 @@ export async function runIndex(args: Args) {
     console.log(`API 호출 ${counter.calls}회`);
     return { fetched, upserted: args.dry ? 0 : fetched };
   };
-  if (args.dry) {
-    await work({ calls: 0 });
-    return;
-  }
-  await recordRun(db, "index", "index", work);
+  await recordRun(db, args, "index", work);
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { barPath, linearY, niceTicks, seriesPaths } from "@/lib/chart";
-import { formatEok, longYm } from "@/lib/format";
+import { barPath, linearY, niceTicks, timeScale } from "@/lib/chart";
+import { formatEok, longYm, shortYm } from "@/lib/format";
+import { jeonseRatio } from "@/lib/stats";
 import {
-  axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow, Swatch, Tag, timeScale,
+  axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow, SeriesLine, Swatch, Tag,
   useWidth, XAxis, YearMarks, YLabel,
 } from "./chartKit";
 
@@ -37,7 +38,7 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
 
   const trade = data.map((d) => (d.trade == null ? null : d.trade / 10000));
   const jeon = data.map((d) => (d.jeonse == null ? null : d.jeonse / 10000));
-  const ratio = data.map((d) => (d.trade && d.jeonse ? (d.jeonse / d.trade) * 100 : null));
+  const ratio = data.map((d) => jeonseRatio(d.trade, d.jeonse));
   const hd = data[h];
 
   const layout = axisLayout(w);
@@ -89,8 +90,8 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
               <svg width={w} height={PH} className="absolute left-0 top-0 block" role="img" aria-label="월별 매매·전세 중위가 차트" {...pointer}>
                 <GridLines ticks={pt} y={py} x0={L0} x1={w - R0} />
                 <YearMarks ts={ts} height={PH} />
-                <Series values={jeon} x={X} y={py} base={PH - PB} partial={P} color="var(--series-2)" grad="grad-s2" />
-                <Series values={trade} x={X} y={py} base={PH - PB} partial={P} color="var(--series-1)" grad="grad-s1" />
+                <SeriesLine values={jeon} x={X} y={py} base={PH - PB} partial={P} color="var(--series-2)" area="grad-s2" width={2.25} />
+                <SeriesLine values={trade} x={X} y={py} base={PH - PB} partial={P} color="var(--series-1)" area="grad-s1" width={2.25} />
                 <Crosshair x={hx} height={PH} />
                 {trade[h] != null && (
                   <>
@@ -115,7 +116,7 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
                   <GridLines ticks={rt} y={ry} x0={L0} x1={w - R0} />
                   <YearMarks ts={ts} height={RH} labels={false} />
                   <text x={L0} y={15} fontSize={11} letterSpacing="0.08em" fill="var(--muted)">전세가율</text>
-                  <Series values={ratio} x={X} y={ry} base={RH - RB} partial={P} color="var(--series-3)" grad="grad-s3" width={1.75} />
+                  <SeriesLine values={ratio} x={X} y={ry} base={RH - RB} partial={P} color="var(--series-3)" area="grad-s3" width={1.75} />
                   <Crosshair x={hx} height={RH} />
                   {ratio[h] != null && <HoverDot x={hx} y={ry(ratio[h]!)} color="var(--series-3)" />}
                   {rt.map((v) => (
@@ -126,7 +127,7 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
               )}
 
               <div className="absolute left-0" style={{ top: PH + RH + 6 }}>
-                <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
+                <XAxis ts={ts} w={w} h={h} label={shortYm(months[h])} layout={layout} height={XH} />
               </div>
             </>
           )}
@@ -154,26 +155,6 @@ export function TrendTerminal({ data, title }: { data: TermPoint[]; title: strin
         </div>
       </section>
     </>
-  );
-}
-
-function Series({ values, x, y, base, partial, color, grad, width = 2.25 }: {
-  values: (number | null)[];
-  x: (i: number) => number;
-  y: (v: number) => number;
-  base: number;
-  partial: number;
-  color: string;
-  grad: string;
-  width?: number;
-}) {
-  const p = seriesPaths(values, x, y, base, partial);
-  return (
-    <g>
-      <path d={p.area} fill={`url(#${grad})`} />
-      <path d={p.solid} fill="none" stroke={color} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
-      <path d={p.dashed} fill="none" stroke={color} strokeWidth={width} strokeDasharray="3 4" strokeLinecap="round" />
-    </g>
   );
 }
 

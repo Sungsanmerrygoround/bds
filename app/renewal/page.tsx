@@ -6,8 +6,8 @@ import { Badge, Stat } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { deltaTone, formatDelta, formatEok, formatYm, shortYm, signedPct } from "@/lib/format";
 import { getGroups, getRenewal, getRenewalDrops, type RenewalRow } from "@/lib/queries";
-import { findGroup } from "@/lib/params";
-import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialFromYm, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
+import { findGroup, groupOptions, groupValue } from "@/lib/params";
+import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 
 // 전세 갱신 분석: 국토부 전월세 신고의 계약 구분(신규/갱신)·갱신요구권·종전 보증금으로
 // 갱신 비중과 갱신 때 보증금이 얼마나 오르내렸는지 본다. 감액 갱신이 늘면 역전세 신호.
@@ -24,8 +24,8 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
   const groupId = group?.id ?? null;
 
   const lastDone = lastCompleteYm();
-  const fetchFrom = [range.from, addMonths(lastDone, -12)].sort()[0]; // 1년 전 비교용
-  const dropsSince = `${addMonths(currentYm(), -3).slice(0, 4)}-${addMonths(currentYm(), -3).slice(4)}-01`;
+  const fetchFrom = minYm(range.from, addMonths(lastDone, -12)); // 1년 전 비교용
+  const dropsSince = monthStart(addMonths(currentYm(), -3));
   const [rows, drops] = await Promise.all([
     getRenewal(groupId, band, fetchFrom, range.to),
     getRenewalDrops(groupId, band, dropsSince, 40),
@@ -58,8 +58,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
         summary={[group?.name ?? "전체 지역", bandText(band), rangeLabel(range)]}
         rail={
           <>
-            <OptionList label="지역" param="g" value={groupId ? String(groupId) : "all"} cols={2}
-              options={[{ value: "all", label: "전체" }, ...groups.map((g) => ({ value: String(g.id), label: g.name }))]} />
+            <OptionList label="지역" param="g" value={groupValue(groupId)} cols={2} options={groupOptions(groups)} />
             <OptionList label="전용면적" param="band" value={bandValue(band)} cols={4} options={BAND_OPTIONS} />
             <RangeList rangeKey={range.key} from={range.from} to={range.to} max={currentYm()} />
           </>

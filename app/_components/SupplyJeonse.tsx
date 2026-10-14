@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { barPath, linearY, niceTicks, seriesPaths } from "@/lib/chart";
-import { formatEok, longYm } from "@/lib/format";
-import { axisLayout, chartPad, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow, Swatch, timeScale, useWidth, XAxis, YearMarks, YLabel } from "./chartKit";
+import { barPath, linearY, niceTicks, seriesPaths, timeScale } from "@/lib/chart";
+import { formatEok, longYm, shortYm } from "@/lib/format";
+import { axisLayout, chartPad, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow, Swatch, useWidth, XAxis, YearMarks, YLabel } from "./chartKit";
 
 // 지역별 '입주 세대(막대) + 전세 중위가(선)'. 단위가 달라 한 축에 겹치지 않고 위아래 두 칸으로 나눈다.
 // 모든 지역 칸이 같은 시간축과 크로스헤어를 공유한다.
@@ -103,7 +103,7 @@ function Panel({ p, months, partialFrom, nowIdx, h, setHover }: {
               <path d={`M${L0} ${BH - BB + 0.5} H${w - R0}`} stroke="var(--axis)" />
               <text x={w - R0 + 6} y={by(bt[bt.length - 1]) + 9} className="mono" fontSize={10} fill="var(--muted)">{bt[bt.length - 1].toLocaleString()}</text>
             </svg>
-            <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
+            <XAxis ts={ts} w={w} h={h} label={shortYm(months[h])} layout={layout} height={XH} />
           </>
         )}
       </div>

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { linearY, niceTicks, toIndex } from "@/lib/chart";
-import { longYm } from "@/lib/format";
+import { linearY, niceTicks, timeScale, toIndex } from "@/lib/chart";
+import { longYm, shortYm } from "@/lib/format";
 import {
-  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, pointerSelect, SeriesLine, Swatch,
-  timeScale, useWidth, XAxis, YearMarks,
+  AxisTags, axisLayout, chartPad, chartPanel, ChartTitle, Crosshair, fx, GridLines, HoverDot, lastTags, pointerSelect, SeriesLine, Swatch,
+  useWidth, XAxis, YearMarks,
 } from "./chartKit";
 
 // 비교 차트: 대상(지역 또는 단지)별 가격 선 차트 + 월별 거래량 선 차트.
@@ -76,14 +76,7 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
 
   // 오른쪽 축 태그: 대상별로 집계가 끝난 최근 달의 값 (집계 중인 달은 덜 잡혀서 쓰지 않음, 그런 달뿐이면 마지막 값)
   const tagsOf = (valueAt: (s: CompareSeries) => (number | null)[]) =>
-    shown
-      .map((s) => {
-        const v = valueAt(s);
-        const done = v.slice(0, lastDone + 1).findLastIndex((x) => x != null);
-        const i = done >= 0 ? done : v.findLastIndex((x) => x != null);
-        return i < 0 ? null : { key: s.id, value: v[i]!, color: s.color };
-      })
-      .filter((x) => x != null);
+    lastTags(shown.map((s) => ({ key: s.id, color: s.color, values: valueAt(s) })), lastDone, true);
 
   const monthLabel = (
     <span className="font-semibold text-ink">
@@ -144,7 +137,7 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
                 <AxisTags items={tagsOf((s) => vals.get(s.id)!)} y={py} height={PH} ticks={pt}
                   fmtTick={(v) => (mode === "price" ? `${v}억` : String(v))} fmtTag={tagFmt} w={w} layout={layout} />
               </svg>
-              <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
+              <XAxis ts={ts} w={w} h={h} label={shortYm(months[h])} layout={layout} height={XH} />
             </>
           )}
         </div>
@@ -164,7 +157,7 @@ export function CompareCharts({ months, partialFrom, series, mode, labels = REGI
                 {shown.map((s) => <HoverDot key={s.id} x={hx} y={cy(s.count[h])} color={s.color} r={3.5} ring={2} />)}
                 <AxisTags items={tagsOf((s) => s.count)} y={cy} height={VH} ticks={ct} fmtTick={String} fmtTag={String} w={w} layout={layout} />
               </svg>
-              <XAxis ts={ts} w={w} h={h} months={months} layout={layout} height={XH} />
+              <XAxis ts={ts} w={w} h={h} label={shortYm(months[h])} layout={layout} height={XH} />
             </>
           )}
         </div>

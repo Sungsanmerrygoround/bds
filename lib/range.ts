@@ -100,3 +100,20 @@ export function monthStart(ym: string): string {
 export function monthEnd(ym: string): string {
   return new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(4)), 0)).toISOString().slice(0, 10);
 }
+
+/** "2026-09-18" → "202609" */
+export const ymOfDate = (date: string) => date.slice(0, 4) + date.slice(5, 7);
+
+/** 둘 중 이른 달 / 늦은 달 (YYYYMM은 문자열 비교가 곧 시간 순) */
+export const minYm = (a: string, b: string) => (a < b ? a : b);
+export const maxYm = (a: string, b: string) => (a < b ? b : a);
+
+/**
+ * KST 오늘에서 n개월 전 날짜 YYYY-MM-DD. 그 달에 같은 날이 없으면 말일:
+ * 10-31의 1개월 전 → 09-30 (서버 시간대·Date.setMonth의 넘침과 관계없이)
+ */
+export function monthsAgo(n: number, now = new Date()): string {
+  const today = todayKst(now);
+  const end = monthEnd(addMonths(ymOfDate(today), -n));
+  return today.slice(8) < end.slice(8) ? `${end.slice(0, 8)}${today.slice(8)}` : end;
+}

@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Badge } from "../_components/ui";
 import { formatEok, formatPct } from "@/lib/format";
-import { findGroup, paramStr } from "@/lib/params";
+import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
 import { EVENT_LIMIT, getEvents, getGroups, type EventRow } from "@/lib/queries";
-import { todayKst } from "@/lib/range";
+import { monthsAgo, todayKst } from "@/lib/range";
 import { isUnregistered, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const PERIODS = [
@@ -31,11 +31,9 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
   const excludeDirect = str("nodirect") === "1";
   const includeInvalid = str("invalid") === "1";
 
-  const since = new Date();
-  since.setMonth(since.getMonth() - Number(months));
   const events = await getEvents({
     type, groupId, minSamples: Number(minSamples), includeDirect: !excludeDirect, includeInvalid,
-    since: since.toISOString().slice(0, 10),
+    since: monthsAgo(Number(months)),
   });
   const highs = events.filter((e) => e.type === "NEW_HIGH").length;
   const today = todayKst();
@@ -51,7 +49,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
       <FilterBar>
         <ParamSelect label="계약일" param="m" value={months} options={PERIODS} />
         <ParamSelect label="유형" param="type" value={type ?? "all"} options={[{ value: "all", label: "전체" }, { value: "NEW_HIGH", label: "신고가" }, { value: "DROP", label: "하락" }]} />
-        <ParamSelect label="지역" param="g" value={groupId ? String(groupId) : "all"} options={[{ value: "all", label: "전체" }, ...groups.map((g) => ({ value: String(g.id), label: g.name }))]} />
+        <ParamSelect label="지역" param="g" value={groupValue(groupId)} options={groupOptions(groups)} />
         <ParamSelect label="비교 거래 수" param="n" value={minSamples} options={SAMPLES} />
         <ParamToggle label="직거래 제외" param="nodirect" checked={excludeDirect} />
         <ParamToggle label="해제·정정된 거래 포함" param="invalid" checked={includeInvalid} />

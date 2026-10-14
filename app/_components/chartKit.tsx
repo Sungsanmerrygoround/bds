@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { seriesPaths, spreadLabels } from "@/lib/chart";
+import { seriesPaths, spreadLabels, type TimeScale } from "@/lib/chart";
 
 // 직접 그리는 SVG 시계열 차트(추이·지역 비교)가 함께 쓰는 부품
 
@@ -33,24 +33,6 @@ export function useWidth() {
 export function axisLayout(w: number) {
   const compact = w < 640;
   return { compact, L0: compact ? 12 : 10, R0: compact ? 46 : 66, font: compact ? 10 : 11 };
-}
-
-/** 시간축: 월 인덱스 → x, 눈금(1·3·6·12개월 중 라벨 간격 44px 이상), 연도 구분 */
-export function timeScale(months: string[], w: number, L0: number, R0: number) {
-  const n = months.length;
-  const IW = Math.max(1, w - L0 - R0);
-  const X = (i: number) => (n === 1 ? L0 + IW / 2 : L0 + (IW * i) / (n - 1));
-  const slot = n > 1 ? IW / (n - 1) : IW;
-  const month = (i: number) => Number(months[i].slice(4));
-  const every = [1, 3, 6, 12].find((m) => slot * m >= 44) ?? 12;
-  const idx = months.map((_, i) => i);
-  const xTicks = idx
-    .filter((i) => (month(i) - 1) % every === 0)
-    .map((i) => ({ i, label: every >= 6 ? `${months[i].slice(2, 4)}.${months[i].slice(4)}` : `${month(i)}월` }));
-  const jans = idx.filter((i) => month(i) === 1 && i > 0);
-  // 첫 연도 라벨은 다음 1월 라벨과 겹치지 않을 때만
-  const yearLabels = [...(jans.length === 0 || X(jans[0]) - X(0) >= 48 ? [0] : []), ...jans].map((i) => ({ i, label: months[i].slice(0, 4) }));
-  return { n, X, slot, xTicks, jans, yearLabels };
 }
 
 /** 포인터(마우스·터치) 위치로 월을 고르는 핸들러. 세로 스크롤은 막지 않는다. */
@@ -95,7 +77,7 @@ export function Swatch({ color, label, value }: { color: string; label: string; 
 }
 
 /** 연도 구분선과 연도 라벨 */
-export function YearMarks({ ts, height, labels = true }: { ts: ReturnType<typeof timeScale>; height: number; labels?: boolean }) {
+export function YearMarks({ ts, height, labels = true }: { ts: TimeScale; height: number; labels?: boolean }) {
   return (
     <>
       {ts.jans.map((i) => <path key={i} d={`M${fx(ts.X(i))} 0 V${height}`} stroke="var(--year)" />)}
@@ -106,12 +88,12 @@ export function YearMarks({ ts, height, labels = true }: { ts: ReturnType<typeof
   );
 }
 
-/** 날짜 눈금 줄 + 선택한 달 태그 */
-export function XAxis({ ts, w, h, months, layout, height = 26 }: {
-  ts: ReturnType<typeof timeScale>;
+/** 날짜 눈금 줄 + 선택한 시점 태그 (label: "26.09" 같은 짧은 이름) */
+export function XAxis({ ts, w, h, label, layout, height = 26 }: {
+  ts: TimeScale;
   w: number;
   h: number;
-  months: string[];
+  label: string;
   layout: ReturnType<typeof axisLayout>;
   height?: number;
 }) {
@@ -124,7 +106,7 @@ export function XAxis({ ts, w, h, months, layout, height = 26 }: {
       <Tag
         x={Math.min(Math.max(hx - 27, 0), w - 54)}
         y={12}
-        text={`${months[h].slice(2, 4)}.${months[h].slice(4)}`}
+        text={label}
         bg="var(--tag)"
         fg="var(--ink)"
         font={layout.font}
@@ -164,8 +146,8 @@ export function HoverDot({ x, y, color, r = 4, ring = 2.5 }: { x: number; y: num
   return <circle cx={x} cy={y} r={r} fill={color} stroke="var(--surface)" strokeWidth={ring} />;
 }
 
-/** 선 계열: 확정 구간은 실선, partial 인덱스부터(집계 중) 점선 */
-export function SeriesLine({ values, x, y, base, partial, color, width = 2 }: {
+/** 선 계열: 확정 구간은 실선, partial 인덱스부터(집계 중) 점선. area를 주면 그 그라데이션(GradientDefs id)으로 아래를 채운다 */
+export function SeriesLine({ values, x, y, base, partial, color, width = 2, area }: {
   values: (number | null)[];
   x: (i: number) => number;
   y: (v: number) => number;
@@ -173,14 +155,32 @@ export function SeriesLine({ values, x, y, base, partial, color, width = 2 }: {
   partial: number;
   color: string;
   width?: number;
+  area?: string;
 }) {
   const p = seriesPaths(values, x, y, base, partial);
   return (
     <g>
+      {area && <path d={p.area} fill={`url(#${area})`} />}
       <path d={p.solid} fill="none" stroke={color} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
       <path d={p.dashed} fill="none" stroke={color} strokeWidth={width} strokeDasharray="3 4" strokeLinecap="round" />
     </g>
   );
+}
+
+/**
+ * 오른쪽 축 태그용: 계열마다 upto 인덱스까지 중 마지막 값.
+ * fallback이면 upto까지 값이 없을 때 전체의 마지막 값을 쓴다 (집계 중인 달뿐인 계열).
+ */
+export function lastTags<K extends string | number>(
+  series: { key: K; color: string; values: (number | null)[] }[],
+  upto = Infinity,
+  fallback = false,
+): { key: K; value: number; color: string }[] {
+  return series.flatMap((s) => {
+    const done = s.values.slice(0, upto + 1).findLastIndex((v) => v != null);
+    const i = done >= 0 || !fallback ? done : s.values.findLastIndex((v) => v != null);
+    return i < 0 ? [] : [{ key: s.key, value: s.values[i]!, color: s.color }];
+  });
 }
 
 /**
