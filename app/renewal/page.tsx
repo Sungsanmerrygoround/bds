@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { MetricChart } from "../_components/MetricChart";
 import { RateChart } from "../_components/RateChart";
-import { Badge, Stat } from "../_components/ui";
+import { Badge, ComplexLink, Stat } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
-import { deltaTone, formatDelta, formatEok, formatYm, shortYm, signedPct } from "@/lib/format";
+import { formatEok, formatYm, shortYm, signedPct, yearAgoDelta } from "@/lib/format";
+import { sharePct } from "@/lib/stats";
 import { getGroups, getRenewal, getRenewalDrops, type RenewalRow } from "@/lib/queries";
 import { findGroup, groupOptions, groupValue } from "@/lib/params";
 import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
@@ -13,7 +13,7 @@ import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, monthStart,
 // 갱신 비중과 갱신 때 보증금이 얼마나 오르내렸는지 본다. 감액 갱신이 늘면 역전세 신호.
 
 const MIN_N = 5; // 한 달 표본이 이보다 적으면 비율을 그리지 않는다
-const share = (a: number, b: number) => (b >= MIN_N ? (a / b) * 100 : null);
+const share = (a: number, b: number) => sharePct(a, b, MIN_N);
 
 export default async function RenewalPage({ searchParams }: PageProps<"/renewal">) {
   const sp = await searchParams;
@@ -44,10 +44,6 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
   const downShare = (r?: RenewalRow) => (r ? share(r.down_count, r.jeonse_renew_count) : null);
 
   const now = at(lastDone), ago = at(addMonths(lastDone, -12));
-  // 1년 전 대비 변동 (색은 오른 쪽/내린 쪽만 뜻한다: 상승 빨강, 하락 파랑)
-  const diff = (a: number | null, b: number | null) => (a == null || b == null ? null : a - b);
-  const d = (a: number | null, b: number | null, unit = "%p") => (diff(a, b) == null ? undefined : `${formatDelta(diff(a, b), unit)} 1년 전 대비`);
-  const tone = (a: number | null, b: number | null) => deltaTone(diff(a, b));
 
   const where = `${group?.name ?? "전체 지역"} · ${bandText(band)}`;
 
@@ -72,13 +68,13 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
 
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <Stat label={`갱신 비중 · ${shortYm(lastDone)}`} value={renewShare(now) == null ? "-" : renewShare(now)!.toFixed(0)} unit={renewShare(now) == null ? undefined : "%"}
-              sub={d(renewShare(now), renewShare(ago))} subTone={tone(renewShare(now), renewShare(ago))} />
+              {...yearAgoDelta(renewShare(now), renewShare(ago))} />
             <Stat label={`갱신요구권 사용 · ${shortYm(lastDone)}`} value={rrShare(now) == null ? "-" : rrShare(now)!.toFixed(0)} unit={rrShare(now) == null ? undefined : "%"}
-              sub={d(rrShare(now), rrShare(ago))} subTone={tone(rrShare(now), rrShare(ago))} />
+              {...yearAgoDelta(rrShare(now), rrShare(ago))} />
             <Stat label={`합의 갱신 보증금 변동 · ${shortYm(lastDone)}`} value={signedPct(freeChange(now))}
-              sub={d(freeChange(now), freeChange(ago))} subTone={tone(freeChange(now), freeChange(ago))} />
+              {...yearAgoDelta(freeChange(now), freeChange(ago))} />
             <Stat label={`감액 갱신 비중 · ${shortYm(lastDone)}`} value={downShare(now) == null ? "-" : downShare(now)!.toFixed(0)} unit={downShare(now) == null ? undefined : "%"}
-              sub={d(downShare(now), downShare(ago))} subTone={tone(downShare(now), downShare(ago))} />
+              {...yearAgoDelta(downShare(now), downShare(ago))} />
           </div>
 
           <MetricChart
@@ -127,8 +123,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
                     <tr key={r.id} className="border-t border-line text-right hover:bg-wash">
                       <td className="py-1.5 text-left">{r.deal_date}</td>
                       <td className="text-left font-sans">
-                        <Link href={`/complex/${encodeURIComponent(r.apt_seq)}?area=${r.area_type}`} className="font-medium hover:underline">{r.apt_nm}</Link>
-                        <span className="ml-1.5 text-xs text-muted">{r.sigungu_name} {r.umd_nm}</span>
+                        <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} where={`${r.sigungu_name} ${r.umd_nm ?? ""}`} area={r.area_type} />
                         {r.use_rr_right && <span className="ml-1.5"><Badge>갱신요구권</Badge></span>}
                       </td>
                       <td>{r.area_type}㎡</td>

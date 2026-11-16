@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { isUnregistered, jeonseRatio, median, movingAvg, peakRecovery, pctChange, rollingMedian } from "./stats";
+import { isNewContract, isUnregistered, jeonseRatio, median, movingAvg, peakRecovery, pctChange, rollingMedian, sharePct } from "./stats";
+
+describe("sharePct", () => {
+  it("비중(%), 표본이 최소 건수보다 적거나 0이면 null", () => {
+    expect(sharePct(1, 4)).toBe(25);
+    expect(sharePct(0, 0)).toBeNull();
+    expect(sharePct(2, 4, 5)).toBeNull();
+    expect(sharePct(2, 5, 5)).toBe(40);
+  });
+});
+
+describe("isNewContract", () => {
+  it("갱신만 제외, 구분이 없는 계약은 신규로 본다", () => {
+    expect(isNewContract({ contract_type: "신규" })).toBe(true);
+    expect(isNewContract({ contract_type: null })).toBe(true);
+    expect(isNewContract({ contract_type: "갱신" })).toBe(false);
+  });
+});
 
 describe("median", () => {
   it("홀수·짝수·빈 배열", () => {

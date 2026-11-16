@@ -16,7 +16,7 @@ function derive(s: ComplexStats) {
   const current = s.trade_median_6m ?? s.last_price;
   return {
     current,
-    ratio: jeonseRatio(s.trade_median_6m, s.jeonse_median_6m),
+    ratio: jeonseRatio(s.trade_median_6m, s.jeonse_new_median_6m),
     peakRatio: current && s.peak_price ? (current / s.peak_price) * 100 : null,
   };
 }
@@ -52,7 +52,7 @@ export default async function WatchPage() {
           <h1 className="text-2xl font-semibold">관심 단지</h1>
           <p className="mt-1 text-sm text-ink-2">
             ★로 저장한 단지 {favs.length}개{missing.length > 0 && ` (${missing.length}개는 데이터 없음)`}. 이 브라우저에만 저장됩니다.
-            <span className="text-muted"> 단지마다 최근 2년 매매가 가장 많은 면적 기준, 중위가는 최근 6개월.</span>
+            <span className="text-muted"> 단지마다 최근 2년 매매가 가장 많은 면적 기준, 중위가는 최근 6개월. 전세는 갱신 계약 제외.</span>
           </p>
         </div>
         {rows.length >= 2 && (
@@ -88,7 +88,7 @@ export default async function WatchPage() {
                   </div>
                   <dl className="mono mt-2 grid grid-cols-3 gap-2 text-xs">
                     <div><dt className="cap">매매 중위</dt><dd className="text-[15px] font-semibold">{formatEok(s.trade_median_6m)}</dd></div>
-                    <div><dt className="cap">전세 중위</dt><dd className="text-[15px] font-semibold">{formatEok(s.jeonse_median_6m)}</dd></div>
+                    <div><dt className="cap">전세 중위</dt><dd className="text-[15px] font-semibold">{formatEok(s.jeonse_new_median_6m)}</dd></div>
                     <div><dt className="cap">최고가 대비</dt><dd className="text-[15px] font-semibold">{d.peakRatio == null ? "-" : `${d.peakRatio.toFixed(0)}%`}</dd></div>
                   </dl>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
@@ -137,7 +137,7 @@ export default async function WatchPage() {
                         <div className="text-[11px] text-muted">{s.last_date ?? "-"}</div>
                       </td>
                       <td className="px-2">{formatEok(s.trade_median_6m)}<span className="ml-1 text-[11px] text-muted">{s.trade_count_6m ?? 0}건</span></td>
-                      <td className="px-2">{formatEok(s.jeonse_median_6m)}<span className="ml-1 text-[11px] text-muted">{s.jeonse_count_6m ?? 0}건</span></td>
+                      <td className="px-2">{formatEok(s.jeonse_new_median_6m)}<span className="ml-1 text-[11px] text-muted">{s.jeonse_new_count_6m ?? 0}건</span></td>
                       <td className="px-2">{d.ratio == null ? "-" : `${d.ratio.toFixed(0)}%`}</td>
                       <td className="px-2" title={s.peak_price ? `최고가 ${formatEok(s.peak_price)} (${s.peak_date})` : undefined}>
                         <div>{d.peakRatio == null ? "-" : `${d.peakRatio.toFixed(0)}%`}</div>

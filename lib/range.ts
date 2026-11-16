@@ -30,6 +30,17 @@ export function todayKst(now = new Date()): string {
   return new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
+/** ISO 시각 → KST 날짜 YYYY-MM-DD */
+export const kstDateOf = (iso: string) => todayKst(new Date(iso));
+
+/** YYYY-MM-DD에 n일을 더한 날짜 */
+export function addDays(date: string, n: number): string {
+  return new Date(Date.parse(date) + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** 두 날짜(YYYY-MM-DD) 사이 일수: to − from */
+export const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
+
 export function addMonths(ym: string, n: number): string {
   const idx = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(4)) - 1 + n;
   return `${Math.floor(idx / 12)}${String((idx % 12) + 1).padStart(2, "0")}`;

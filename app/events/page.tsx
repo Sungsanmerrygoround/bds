@@ -1,6 +1,6 @@
-import Link from "next/link";
+import { EventTabs } from "../_components/EventTabs";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
-import { Badge } from "../_components/ui";
+import { Badge, ComplexLink } from "../_components/ui";
 import { formatEok, formatPct } from "@/lib/format";
 import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
 import { EVENT_LIMIT, getEvents, getGroups, type EventRow } from "@/lib/queries";
@@ -43,9 +43,10 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
   return (
     <FilterScope>
       <h1 className="mb-1 text-2xl font-semibold">신고가·하락 거래</h1>
-      <p className="mb-4 text-sm text-ink-2">
+      <p className="mb-3 text-sm text-ink-2">
         같은 단지·같은 전용면적(소수 첫째 자리) 기준. 신고가 = 계약일 직전 36개월 최고가 초과, 하락 = 직전 6개월 중위가 대비 -10% 이하.
       </p>
+      <EventTabs active="/events" />
       <FilterBar>
         <ParamSelect label="계약일" param="m" value={months} options={PERIODS} />
         <ParamSelect label="유형" param="type" value={type ?? "all"} options={[{ value: "all", label: "전체" }, { value: "NEW_HIGH", label: "신고가" }, { value: "DROP", label: "하락" }]} />
@@ -89,10 +90,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
                     </span>
                   </td>
                   <td className="px-3 text-left font-sans">
-                    <Link href={`/complex/${encodeURIComponent(e.apt_seq)}?area=${e.area_type}`} className="font-medium hover:underline">
-                      {e.complexes.apt_nm}
-                    </Link>
-                    <span className="ml-1.5 text-xs text-muted">{e.complexes.regions.sigungu_name} {e.complexes.umd_nm}</span>
+                    <ComplexLink aptSeq={e.apt_seq} name={e.complexes.apt_nm} where={`${e.complexes.regions.sigungu_name} ${e.complexes.umd_nm ?? ""}`} area={e.area_type} />
                   </td>
                   <td className="px-3">{e.area_type}㎡</td>
                   <td className="px-3">{e.apt_trades?.floor ?? "-"}</td>

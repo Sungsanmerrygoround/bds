@@ -70,13 +70,14 @@ export interface DealDot {
   date: string;
   floor: number | null;
   direct: boolean;
+  renewal?: boolean; // 전세 갱신 계약 (직거래처럼 속 빈 점)
   tag?: string; // 신고가 +5.2% 등
 }
 
 function Dot(props: { cx?: number; cy?: number; payload?: DealDot; color: string }) {
   const { cx, cy, payload, color } = props;
   if (cx == null || cy == null) return null;
-  return payload?.direct ? (
+  return payload?.direct || payload?.renewal ? (
     <circle cx={cx} cy={cy} r={4} fill="var(--surface)" stroke={color} strokeWidth={2} />
   ) : (
     <circle cx={cx} cy={cy} r={4} fill={color} stroke="var(--surface)" strokeWidth={1.5} />
@@ -133,28 +134,40 @@ export interface SupplyPoint {
   [groupKey: string]: number | string;
 }
 
-export function SupplyChart({ data, series, nowYm }: { data: SupplyPoint[]; series: { key: string; label: string; color: string }[]; nowYm: string }) {
+type SupplySeries = { key: string; label: string; color: string };
+
+/**
+ * 월별 입주 세대(위로 쌓음). relocation이 있으면 이주 세대를 0 아래로 쌓는다:
+ * 데이터의 relocation 키 값은 음수여야 한다 (입주는 전세 공급, 이주는 전세 수요라 방향을 반대로).
+ */
+export function SupplyChart({ data, series, relocation = [], nowYm }: { data: SupplyPoint[]; series: SupplySeries[]; relocation?: SupplySeries[]; nowYm: string }) {
+  const sum = (d: SupplyPoint, xs: SupplySeries[]) => xs.reduce((s, x) => s + Math.abs(Number(d[x.key] ?? 0)), 0);
+  const rows = (d: SupplyPoint, xs: SupplySeries[], suffix: string) =>
+    xs.filter((x) => Number(d[x.key] ?? 0) !== 0).map((x) => ({ color: x.color, label: `${x.label}${suffix}`, value: `${Math.abs(Number(d[x.key])).toLocaleString()}세대` }));
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 16, right: 16, bottom: 0, left: 4 }} barCategoryGap="15%">
+        <BarChart data={data} margin={{ top: 16, right: 16, bottom: 0, left: 4 }} barCategoryGap="15%" stackOffset="sign">
           <CartesianGrid vertical={false} stroke="var(--grid)" />
           <XAxis dataKey="ym" ticks={monthTicks(data.map((d) => d.ym))} tickFormatter={ymLabel} {...AXIS} />
-          <YAxis width={56} axisLine={false} allowDecimals={false} tickFormatter={(v: number) => v.toLocaleString()} {...AXIS} />
+          <YAxis width={56} axisLine={false} allowDecimals={false} tickFormatter={(v: number) => Math.abs(v).toLocaleString()} {...AXIS} />
+          {relocation.length > 0 && <ReferenceLine y={0} stroke="var(--axis)" />}
           <ReferenceLine x={nowYm} stroke="var(--muted)" strokeDasharray="3 3" label={{ value: "이번 달", position: "top", fill: "var(--muted)", fontSize: 11 }} />
           <Tooltip
             cursor={{ fill: "var(--wash)" }}
             content={tip((p) => {
               const d = p.payload as SupplyPoint | undefined;
               if (!d) return null;
-              const total = series.reduce((s, x) => s + Number(d[x.key] ?? 0), 0);
+              const moved = sum(d, relocation);
               return (
                 <TipBox
                   title={`${d.ym.slice(0, 4)}년 ${Number(d.ym.slice(4, 6))}월 입주 예정`}
                   rows={[
-                    ...series.filter((x) => Number(d[x.key] ?? 0) > 0).map((x) => ({ color: x.color, label: x.label, value: `${Number(d[x.key]).toLocaleString()}세대` })),
-                    { label: "합계", value: `${total.toLocaleString()}세대` },
+                    ...rows(d, series, ""),
+                    { label: "합계", value: `${sum(d, series).toLocaleString()}세대` },
+                    ...rows(d, relocation, " 이주"),
                   ]}
+                  note={moved > 0 ? "이주 = 재건축·재개발로 집을 비우는 세대 (직접 입력)" : undefined}
                 />
               );
             })}
@@ -164,6 +177,9 @@ export function SupplyChart({ data, series, nowYm }: { data: SupplyPoint[]; seri
               key={s.key} dataKey={s.key} stackId="a" fill={s.color} stroke="var(--surface)" strokeWidth={1}
               radius={i === series.length - 1 ? [4, 4, 0, 0] : 0} isAnimationActive={false}
             />
+          ))}
+          {relocation.map((s) => (
+            <Bar key={s.key} dataKey={s.key} stackId="a" fill={s.color} fillOpacity={0.35} stroke={s.color} strokeWidth={1} strokeDasharray="3 2" isAnimationActive={false} />
           ))}
         </BarChart>
       </ResponsiveContainer>

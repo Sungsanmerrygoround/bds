@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
-  addMonths, currentYm, lastCompleteYm, maxYm, minYm, monthEnd, monthsAgo, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel,
-  recentMonths, resolveRange, ymOfDate,
+  addDays, addMonths, currentYm, daysBetween, kstDateOf, lastCompleteYm, maxYm, minYm, monthEnd, monthsAgo, monthsBetween, monthStart, partialFromYm,
+  partialIndex, rangeLabel, recentMonths, resolveRange, ymOfDate,
 } from "./range";
+
+describe("kstDateOf · addDays · daysBetween", () => {
+  it("ISO 시각의 KST 날짜 (UTC 15시부터 다음 날)", () => {
+    expect(kstDateOf("2026-11-13T14:59:59Z")).toBe("2026-11-13");
+    expect(kstDateOf("2026-11-13T15:00:00Z")).toBe("2026-11-14");
+    expect(kstDateOf("2026-11-14T02:19:06.86329+00:00")).toBe("2026-11-14");
+  });
+  it("날짜 더하기는 달·해를 넘긴다", () => {
+    expect(addDays("2026-11-16", -2)).toBe("2026-11-14");
+    expect(addDays("2026-03-01", -1)).toBe("2026-02-28");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2026-11-16", 0)).toBe("2026-11-16");
+  });
+  it("두 날짜 사이 일수 (뒤 − 앞)", () => {
+    expect(daysBetween("2026-10-14", "2026-11-13")).toBe(30);
+    expect(daysBetween("2026-11-13", "2026-11-13")).toBe(0);
+    expect(daysBetween("2026-11-13", "2026-11-10")).toBe(-3);
+  });
+});
 
 // 2026-09-28 10:00 KST
 const now = new Date("2026-09-28T01:00:00Z");

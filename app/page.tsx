@@ -19,6 +19,8 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const band = parseBand(sp.band);
   const groups = await getGroups();
   const group = findGroup(groups, sp.g) ?? groups[0];
+  // 전세 기준: 기본은 갱신 제외(새로 계약하는 시세). 갱신 계약은 종전 보증금에 묶여 중위가를 낮춘다.
+  const jeonseBasis = sp.jb === "all" ? "all" : "new";
 
   const now = currentYm();
   const partialFrom = partialFromYm();
@@ -27,7 +29,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
   // 전고점 대비를 위해 보관 기간 전체를 받는다 (1년 전 비교·12개월 스파크라인도 여기서)
   const fetchFrom = minYm(range.from, DATA_START);
   const [rows, groupLatest] = await Promise.all([
-    getTrend(group.id, band, fetchFrom, range.to),
+    getTrend(group.id, band, fetchFrom, range.to, jeonseBasis),
     Promise.all(groups.map((g) => getTrend(g.id, band, lastDone, lastDone).then((r) => r[0]?.trade_median ?? null))),
   ]);
   const byYm = new Map(rows.map((r) => [r.ym, r]));
@@ -67,7 +69,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
     <FilterScope>
       <h1 className="sr-only">매매·전세 추이</h1>
       <RailLayout
-        summary={[group.name, bandText(band), rangeLabel(range)]}
+        summary={[group.name, bandText(band), rangeLabel(range), ...(jeonseBasis === "all" ? ["전세 갱신 포함"] : [])]}
         rail={
           <>
             <OptionList
@@ -78,6 +80,8 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
               options={groups.map((g, i) => ({ value: String(g.id), label: g.name, aside: formatEok(groupLatest[i]) }))}
             />
             <OptionList label="전용면적" param="band" value={bandValue(band)} cols={4} options={BAND_OPTIONS} />
+            <OptionList label="전세 기준" param="jb" value={jeonseBasis} cols={2}
+              options={[{ value: "new", label: "신규 계약", aside: "갱신 제외" }, { value: "all", label: "전체", aside: "갱신 포함" }]} />
             <RangeList rangeKey={range.key} from={range.from} to={range.to} max={now} />
           </>
         }
@@ -87,6 +91,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
             {group.name}
             <span className="text-muted"> ({group.regions.map((r) => r.sigungu_name).join(", ")})</span> · {band == null ? "전체 면적" : AREA_BAND_LABEL[band]} ·{" "}
             <span className="mono">{formatYm(range.from)} – {formatYm(range.to)}</span>
+            <span className="text-muted"> · 전세는 {jeonseBasis === "new" ? "신규 계약 기준(갱신 제외)" : "갱신 포함 전체 계약 기준"}</span>
           </p>
 
           {latest && (

@@ -8,7 +8,7 @@ import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
 import { getGroups, getSupply, getTrend } from "@/lib/queries";
 import { groupColor } from "@/lib/groups";
 import { addMonths, currentYm, DATA_START, lastCompleteYm, maxYm, minYm, monthsBetween, partialIndex } from "@/lib/range";
-import { REACTION_BEFORE, supplyByGroup, supplyReactions } from "@/lib/supply";
+import { REACTION_BEFORE, relocationByGroup, supplyByGroup, supplyReactions } from "@/lib/supply";
 
 const HISTORY_AHEAD = 24; // 입주·전세 칸: 보관 시작 ~ 향후 2년
 const REACTION_MIN = 500; // 이 세대 이상 입주한 달만 전후 비교
@@ -47,15 +47,22 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
   // 위쪽 차트: 선택 기간 월별 그룹 세대
   const winMonths = monthsBetween(from, to);
   const winSupply = supplyByGroup(regionToGroupId, winMonths, projects, manual);
+  // 이주(직접 입력한 재건축·재개발 이주)는 전세 수요라 차트에서 0 아래로 그린다
+  const winMoveOut = relocationByGroup(regionToGroupId, winMonths, manual);
+  const moveOutSeries = series
+    .map((s, i) => ({ ...s, key: `out_${s.key}`, groupId: shownGroups[i].id }))
+    .filter((s) => winMoveOut.get(s.groupId)!.some((n) => n > 0));
   const data: SupplyPoint[] = winMonths.map((ym, i) => {
     const pt: SupplyPoint = { ym };
     for (const g of shownGroups) pt[`g${g.id}`] = winSupply.get(g.id)![i];
+    for (const s of moveOutSeries) pt[s.key] = -winMoveOut.get(s.groupId)![i];
     return pt;
   });
-  const sumBetween = (a: string, b: string) =>
-    winMonths.reduce((s, m, i) => (m >= a && m <= b ? s + shownGroups.reduce((x, g) => x + winSupply.get(g.id)![i], 0) : s), 0);
-  const nextYear = sumBetween(addMonths(now, 1), addMonths(now, 12));
-  const yearAfter = sumBetween(addMonths(now, 13), addMonths(now, 24));
+  const sumBetween = (by: Map<number, number[]>, a: string, b: string) =>
+    winMonths.reduce((s, m, i) => (m >= a && m <= b ? s + shownGroups.reduce((x, g) => x + by.get(g.id)![i], 0) : s), 0);
+  const nextYear = sumBetween(winSupply, addMonths(now, 1), addMonths(now, 12));
+  const yearAfter = sumBetween(winSupply, addMonths(now, 13), addMonths(now, 24));
+  const moveOutNextYear = sumBetween(winMoveOut, addMonths(now, 1), addMonths(now, 12));
 
   // 입주 전후 전세가
   const histMonths = monthsBetween(DATA_START, histTo);
@@ -74,9 +81,24 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
   }));
   const offs = (a: readonly [number, number]) => `${Math.abs(a[0])}~${Math.abs(a[1])}`;
 
-  const list = projects
-    .filter((p) => inScope(p.region_id) && (showExcluded || !p.is_excluded))
-    .sort((a, b) => a.move_in_ym.localeCompare(b.move_in_ym) || a.house_nm.localeCompare(b.house_nm));
+  // 목록: 청약홈 공고 + 직접 입력(manual_supply). 직접 입력은 공고에 안 잡히는 입주(조합원분 등)와 재건축·재개발 이주.
+  const shownProjects = projects.filter((p) => inScope(p.region_id) && (showExcluded || !p.is_excluded));
+  const shownManual = manual.filter((m) => inScope(m.region_id));
+  const list = [
+    ...shownProjects.map((p) => ({
+      key: `p${p.house_manage_no}`, ym: p.move_in_ym, name: p.house_nm, url: p.pblanc_url, regionId: p.region_id,
+      households: p.total_households_override ?? p.households, muted: p.is_excluded, note: null as string | null, moveOut: false,
+      tags: [
+        p.house_secd_nm && p.house_secd_nm !== "APT" ? p.house_secd_nm : null,
+        p.rent_secd_nm && p.rent_secd_nm !== "분양주택" ? p.rent_secd_nm : null,
+        p.is_excluded ? `제외: ${p.exclude_reason}` : null,
+      ].filter((t): t is string => !!t),
+    })),
+    ...shownManual.map((m) => ({
+      key: `m${m.id}`, ym: m.ym, name: m.name, url: null, regionId: m.region_id,
+      households: m.households, muted: false, note: m.note, moveOut: m.kind === "이주", tags: ["직접 입력"],
+    })),
+  ].sort((a, b) => a.ym.localeCompare(b.ym) || a.name.localeCompare(b.name));
 
   return (
     <FilterScope>
@@ -94,17 +116,22 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="향후 12개월 입주" value={`${nextYear.toLocaleString()}세대`} />
           <Stat label="그 다음 12개월" value={`${yearAfter.toLocaleString()}세대`} />
+          {moveOutNextYear > 0 && <Stat label="향후 12개월 이주" value={`${moveOutNextYear.toLocaleString()}세대`} sub="재건축·재개발 이주 (직접 입력)" />}
         </div>
 
-        <Card title="월별 입주 예정 세대" right={series.length > 1 ? <Legend items={series.map((s) => ({ color: s.color, label: s.label }))} /> : undefined}>
-          <SupplyChart data={data} series={series} nowYm={now} />
+        <Card
+          title="월별 입주 예정 세대"
+          subtitle={moveOutSeries.length > 0 ? "0 아래 점선 막대 = 재건축·재개발 이주 세대(직접 입력). 이주는 주변 전세 수요를 늘립니다." : undefined}
+          right={series.length > 1 ? <Legend items={series.map((s) => ({ color: s.color, label: s.label }))} /> : undefined}
+        >
+          <SupplyChart data={data} series={series} relocation={moveOutSeries} nowYm={now} />
         </Card>
 
         <section className="mb-4 flex flex-col gap-3">
           <div>
             <h2 className="text-sm font-semibold">입주와 전세가</h2>
             <p className="mt-0.5 text-xs text-muted">
-              지역별 전용 {DEFAULT_BAND}㎡ 전세 중위가(위)와 월별 입주 세대(아래). {REACTION_MIN}세대 이상 입주한 달은 위 칸에 점선으로 표시. 흐린 막대 = 앞으로 입주.
+              지역별 전용 {DEFAULT_BAND}㎡ 전세 중위가(위, 갱신 제외 신규 계약)와 월별 입주 세대(아래). {REACTION_MIN}세대 이상 입주한 달은 위 칸에 점선으로 표시. 흐린 막대 = 앞으로 입주.
             </p>
           </div>
           <SupplyJeonse months={histMonths} partialFrom={histPartial} nowIdx={histMonths.indexOf(now)} panels={panels} />
@@ -152,12 +179,12 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
           </div>
         </section>
 
-        <Card title={`공고 ${list.length}건`}>
+        <Card title={`공고 ${shownProjects.length}건${shownManual.length > 0 ? ` · 직접 입력 ${shownManual.length}건` : ""}`}>
           <div className="overflow-x-auto">
             <table className="mono w-full min-w-[640px] text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
-                  <th className="py-1 text-left font-normal">입주 예정</th>
+                  <th className="py-1 text-left font-normal">{shownManual.some((m) => m.kind === "이주") ? "입주·이주월" : "입주 예정"}</th>
                   <th className="text-left font-normal">단지</th>
                   <th className="text-left font-normal">지역</th>
                   <th className="font-normal">세대</th>
@@ -165,19 +192,19 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => (
-                  <tr key={p.house_manage_no} className={`border-t border-line text-right ${p.is_excluded ? "text-muted" : ""}`}>
-                    <td className={`py-1.5 text-left ${p.move_in_ym < now ? "text-muted" : ""}`}>{formatYm(p.move_in_ym)}</td>
+                {list.map((r) => (
+                  <tr key={r.key} className={`border-t border-line text-right ${r.muted ? "text-muted" : ""}`}>
+                    <td className={`py-1.5 text-left ${r.ym < now ? "text-muted" : ""}`}>{formatYm(r.ym)}</td>
                     <td className="text-left font-sans">
-                      {p.pblanc_url ? <a href={p.pblanc_url} target="_blank" rel="noreferrer" className="hover:underline">{p.house_nm}</a> : p.house_nm}
+                      {r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="hover:underline">{r.name}</a> : r.name}
+                      {r.note && <span className="ml-1.5 text-xs text-muted">{r.note}</span>}
                     </td>
-                    <td className="text-left font-sans text-ink-2">{groupName.get(regionToGroupId.get(p.region_id)!)}</td>
-                    <td>{(p.total_households_override ?? p.households).toLocaleString()}</td>
+                    <td className="text-left font-sans text-ink-2">{groupName.get(regionToGroupId.get(r.regionId)!)}</td>
+                    <td>{r.households.toLocaleString()}</td>
                     <td className="text-left">
                       <span className="inline-flex flex-wrap gap-1 pl-3">
-                        {p.house_secd_nm && p.house_secd_nm !== "APT" && <Badge>{p.house_secd_nm}</Badge>}
-                        {p.rent_secd_nm && p.rent_secd_nm !== "분양주택" && <Badge>{p.rent_secd_nm}</Badge>}
-                        {p.is_excluded && <Badge>제외: {p.exclude_reason}</Badge>}
+                        {r.moveOut && <Badge tone="warn">이주</Badge>}
+                        {r.tags.map((t) => <Badge key={t}>{t}</Badge>)}
                       </span>
                     </td>
                   </tr>
@@ -188,6 +215,9 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
               </tbody>
             </table>
           </div>
+          <p className="mt-2 text-[11px] text-muted">
+            공고에 안 잡히는 입주(재건축 조합원분 등)와 재건축·재개발 이주는 DB의 manual_supply 표에 직접 넣으면 차트와 목록에 함께 나옵니다 (README의 &apos;입주 물량 직접 입력&apos;).
+          </p>
         </Card>
       </Dimmed>
     </FilterScope>

@@ -8,7 +8,7 @@ import { groupColor } from "@/lib/groups";
 import { isAptSeq, paramStr } from "@/lib/params";
 import { getComplexes, getComplexInfo, getComplexRents, getComplexTrades, searchComplexes } from "@/lib/queries";
 import { addMonths, currentYm, lastCompleteYm, monthsBetween, partialIndex, rangeLabel, resolveRange, ymOfDate } from "@/lib/range";
-import { jeonseRatio, median, rollingMedian } from "@/lib/stats";
+import { isNewContract, jeonseRatio, median, rollingMedian } from "@/lib/stats";
 
 // 단지 비교: 최대 5개 단지의 같은 면적 구간 가격을 한 차트에.
 // 단지는 한 달 거래가 적어 달마다 '그 달 포함 최근 3개월 거래의 중위값'으로 그린다.
@@ -48,7 +48,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
   const rows = valid.map((id) => {
     const [trades, rents] = data[ids.indexOf(id)];
     const t = trades.filter((r) => !r.is_cancelled && !r.missing_since && inBand(r.area_band));
-    const j = rents.filter((r) => r.rent_type === "전세" && inBand(r.area_band));
+    const j = rents.filter((r) => r.rent_type === "전세" && isNewContract(r) && inBand(r.area_band)); // 전세는 갱신 제외
     const deals = metric === "trade" ? t.map((r) => ({ ym: ymOfDate(r.deal_date), price: r.price_man })) : j.map((r) => ({ ym: ymOfDate(r.deal_date), price: r.deposit_man }));
     const rolled = rollingMedian(windowMonths, deals).slice(2);
     const counts = months.map((m) => deals.filter((d) => d.ym === m).length);
@@ -136,7 +136,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
         <Dimmed className="flex flex-col gap-4">
           <p className="hidden text-sm text-ink-2 lg:block">
             {kind} · {band == null ? "전체 면적" : AREA_BAND_LABEL[band]} · <span className="mono">{formatYm(range.from)} – {formatYm(range.to)}</span>
-            <span className="text-muted"> · 달마다 그 달 포함 최근 3개월 거래의 중위값</span>
+            <span className="text-muted"> · 달마다 그 달 포함 최근 3개월 거래의 중위값{metric === "jeonse" && " · 갱신 계약 제외"}</span>
           </p>
 
           {valid.length === 0 ? null : hasData ? (
@@ -188,7 +188,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
                   ))}
                 </tbody>
               </table>
-              <p className="px-3 pb-2 text-[11px] text-muted">최근 3개월 = 집계가 끝난 최근 3개월. 면적 구간 안 모든 타입 포함.</p>
+              <p className="px-3 pb-2 text-[11px] text-muted">최근 3개월 = 집계가 끝난 최근 3개월. 면적 구간 안 모든 타입 포함. 전세는 갱신 계약 제외.</p>
             </div>
           )}
         </Dimmed>

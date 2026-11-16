@@ -14,6 +14,18 @@ export interface ManualSupplyLike {
   kind: "입주" | "이주";
 }
 
+/** 그룹별 월별 합계를 쌓는 틀: 모든 그룹이 months 길이의 0 배열로 시작한다. 모르는 지역·기간 밖 달은 버린다. */
+function groupMonthSums(regionToGroup: Map<number, number>, months: string[]) {
+  const idx = new Map(months.map((m, i) => [m, i]));
+  const out = new Map<number, number[]>([...new Set(regionToGroup.values())].map((g) => [g, months.map(() => 0)]));
+  const add = (regionId: number, ym: string, n: number) => {
+    const g = regionToGroup.get(regionId);
+    const i = idx.get(ym);
+    if (g != null && i != null) out.get(g)![i] += n;
+  };
+  return { out, add };
+}
+
 /** 지역 그룹별 월별 입주 세대 (months와 같은 길이). 제외된 공고·이주는 빼고, 재건축 보정값이 있으면 그 값. */
 export function supplyByGroup(
   regionToGroup: Map<number, number>,
@@ -21,18 +33,16 @@ export function supplyByGroup(
   projects: SupplyProjectLike[],
   manual: ManualSupplyLike[],
 ): Map<number, number[]> {
-  const idx = new Map(months.map((m, i) => [m, i]));
-  const out = new Map<number, number[]>();
-  const add = (regionId: number, ym: string, n: number) => {
-    const g = regionToGroup.get(regionId);
-    const i = idx.get(ym);
-    if (g == null || i == null) return;
-    if (!out.has(g)) out.set(g, months.map(() => 0));
-    out.get(g)![i] += n;
-  };
+  const { out, add } = groupMonthSums(regionToGroup, months);
   for (const p of projects) if (!p.is_excluded) add(p.region_id, p.move_in_ym, p.total_households_override ?? p.households);
   for (const m of manual) if (m.kind === "입주") add(m.region_id, m.ym, m.households);
-  for (const g of new Set(regionToGroup.values())) if (!out.has(g)) out.set(g, months.map(() => 0));
+  return out;
+}
+
+/** 지역 그룹별 월별 이주 세대 (직접 입력한 재건축·재개발 이주). 입주와 반대로 주변 전세 수요를 늘린다. */
+export function relocationByGroup(regionToGroup: Map<number, number>, months: string[], manual: ManualSupplyLike[]): Map<number, number[]> {
+  const { out, add } = groupMonthSums(regionToGroup, months);
+  for (const m of manual) if (m.kind === "이주") add(m.region_id, m.ym, m.households);
   return out;
 }
 

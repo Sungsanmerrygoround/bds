@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { supplyByGroup, supplyReactions } from "./supply";
+import { relocationByGroup, supplyByGroup, supplyReactions } from "./supply";
 
 const months = Array.from({ length: 10 }, (_, i) => `2025${String(i + 1).padStart(2, "0")}`);
 
@@ -23,6 +23,27 @@ describe("supplyByGroup", () => {
     expect(out.get(10)![2]).toBe(400);
     expect(out.get(10)![3]).toBe(0);
     expect(out.get(20)!.reduce((a, b) => a + b, 0)).toBe(70);
+  });
+
+  it("공고가 없는 그룹도 0으로 채운다", () => {
+    const out = supplyByGroup(new Map([[1, 10], [3, 20]]), months, [], []);
+    expect([...out.keys()].sort()).toEqual([10, 20]);
+    expect(out.get(20)).toEqual(months.map(() => 0));
+  });
+});
+
+describe("relocationByGroup", () => {
+  it("직접 입력한 이주만 그룹·월별로 합산 (입주·기간 밖·모르는 지역 제외)", () => {
+    const out = relocationByGroup(new Map([[1, 10], [2, 10], [3, 20]]), months, [
+      { region_id: 1, ym: "202506", households: 800, kind: "이주" },
+      { region_id: 2, ym: "202506", households: 200, kind: "이주" },
+      { region_id: 3, ym: "202505", households: 70, kind: "입주" },
+      { region_id: 1, ym: "203001", households: 5, kind: "이주" },
+      { region_id: 9, ym: "202506", households: 5, kind: "이주" },
+    ]);
+    expect(out.get(10)![5]).toBe(1000);
+    expect(out.get(10)!.reduce((a, b) => a + b, 0)).toBe(1000);
+    expect(out.get(20)).toEqual(months.map(() => 0));
   });
 });
 

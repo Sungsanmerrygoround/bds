@@ -9,7 +9,7 @@ import { complexFacts, formatEok, formatPct } from "@/lib/format";
 import { isAptSeq, safeDecode } from "@/lib/params";
 import { getComplex, getComplexInfo, getComplexRents, getComplexTrades } from "@/lib/queries";
 import { currentYm, monthsAgo, rangeLabel, resolveRange, todayKst } from "@/lib/range";
-import { isUnregistered, jeonseRatio, median, UNREGISTERED_DAYS } from "@/lib/stats";
+import { isNewContract, isUnregistered, jeonseRatio, median, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const TABLE_ROWS = 50;
 const ts = (date: string) => Date.parse(`${date}T00:00:00Z`);
@@ -55,7 +55,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
     };
   });
   const jeonseDots: DealDot[] = jeonse.map((r) => ({
-    t: ts(r.deal_date), price: r.deposit_man, kind: "전세", date: r.deal_date, floor: r.floor, direct: false,
+    t: ts(r.deal_date), price: r.deposit_man, kind: "전세", date: r.deal_date, floor: r.floor, direct: false, renewal: !isNewContract(r),
     tag: r.contract_type ? `${r.contract_type}${r.use_rr_right ? "(갱신요구권)" : ""}` : undefined,
   }));
 
@@ -66,7 +66,11 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
   const lastTrade = validTrades[0];
   const maxTrade = validTrades.reduce<number | null>((m, r) => (m == null || r.price_man > m ? r.price_man : m), null);
   const recentCut = monthsAgo(3);
-  const recentJeonse = median(jeonse.filter((r) => r.deal_date >= recentCut).map((r) => r.deposit_man));
+  // 전세 중위는 갱신 제외: 갱신 계약은 종전 보증금에 묶여 지금 시세보다 낮다
+  const recentJeonseAll = jeonse.filter((r) => r.deal_date >= recentCut);
+  const recentJeonseNew = recentJeonseAll.filter(isNewContract);
+  const recentJeonse = median(recentJeonseNew.map((r) => r.deposit_man));
+  const recentRenewals = recentJeonseAll.length - recentJeonseNew.length;
   const recentTrade = median(validTrades.filter((r) => r.deal_date >= recentCut).map((r) => r.price_man));
   const ratio = jeonseRatio(recentTrade, recentJeonse);
 
@@ -120,14 +124,17 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
           <Stat
             label="최근 3개월 전세 중위"
             value={formatEok(recentJeonse)}
-            sub={ratio == null ? undefined : `전세가율 ${Math.round(ratio)}%`}
+            sub={[
+              ratio == null ? null : `전세가율 ${Math.round(ratio)}%`,
+              recentJeonseAll.length > 0 ? `신규 ${recentJeonseNew.length}건${recentRenewals > 0 ? ` (갱신 ${recentRenewals}건 제외)` : ""}` : null,
+            ].filter(Boolean).join(" · ") || undefined}
           />
         </div>
 
         <Card
           title="거래 분포"
           subtitle="점 하나가 거래 한 건. 해제·정정 거래 제외."
-          right={<Legend items={[{ color: "var(--series-1)", label: "매매" }, { color: "var(--series-2)", label: "전세" }, { color: "var(--ink-2)", label: "직거래", hollow: true }]} />}
+          right={<Legend items={[{ color: "var(--series-1)", label: "매매" }, { color: "var(--series-2)", label: "전세" }, { color: "var(--series-2)", label: "전세 갱신", hollow: true }, { color: "var(--series-1)", label: "직거래", hollow: true }]} />}
         >
           {tradeDots.length + jeonseDots.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted">이 기간에 거래가 없습니다.</p>

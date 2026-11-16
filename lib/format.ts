@@ -40,6 +40,12 @@ export function deltaTone(v: number | null): "up" | "down" | "muted" {
   return v == null ? "muted" : v >= 0 ? "up" : "down";
 }
 
+/** 지표 카드(Stat)의 '1년 전 대비' 표시: 둘 중 하나라도 없으면 표시하지 않는다. 비율 지표는 %p 차이. */
+export function yearAgoDelta(now: number | null | undefined, ago: number | null | undefined, unit = "%p"): { sub?: string; subTone: "up" | "down" | "muted" } {
+  const d = now == null || ago == null ? null : now - ago;
+  return { sub: d == null ? undefined : `${formatDelta(d, unit)} 1년 전 대비`, subTone: deltaTone(d) };
+}
+
 /** 세대수 "1,234세대" */
 export function formatHouseholds(n: number | null | undefined): string {
   return n == null ? "-" : `${formatCount(n)}세대`;

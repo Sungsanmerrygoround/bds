@@ -60,6 +60,15 @@ export function isUnregistered(t: { deal_date: string; rgst_date: string | null;
   return (Date.parse(today) - Date.parse(t.deal_date)) / 86_400_000 > UNREGISTERED_DAYS;
 }
 
+/**
+ * 갱신이 아닌 전월세 계약인가 (계약 구분이 없는 행은 신규로 본다 — SQL의 `contract_type is distinct from '갱신'`과 같은 기준).
+ * 전세 중위가는 이 계약만으로 낸다: 갱신은 종전 보증금에 묶여 지금 시세보다 낮게 찍힌다.
+ */
+export const isNewContract = (r: { contract_type: string | null }) => r.contract_type !== "갱신";
+
+/** 비중(%) = part ÷ total × 100. 표본(total)이 minTotal보다 적으면 null (적은 표본의 비율은 그리지 않는다) */
+export const sharePct = (part: number, total: number, minTotal = 1) => (total >= minTotal && total > 0 ? (part / total) * 100 : null);
+
 /** a/b − 1 (%). 둘 중 하나가 없거나 0이면 null (가격 0은 값 없음) */
 export const pctChange = (a: number | null | undefined, b: number | null | undefined) => (a && b ? (a / b - 1) * 100 : null);
 

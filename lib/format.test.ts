@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { complexFacts, deltaTone, formatCount, formatDelta, formatHouseholds, shortDate, signedPct } from "./format";
+import { complexFacts, deltaTone, formatCount, formatDelta, formatHouseholds, shortDate, signedPct, yearAgoDelta } from "./format";
 
 describe("단지 기본정보 표시", () => {
   it("formatHouseholds", () => {
@@ -30,6 +30,12 @@ describe("변동 표시", () => {
     expect(formatDelta(0)).toBe("▲ +0.0%");
     expect(formatDelta(null)).toBeNull();
     expect([deltaTone(0), deltaTone(-0.1), deltaTone(null)]).toEqual(["up", "down", "muted"]);
+  });
+  it("yearAgoDelta: 1년 전과의 차이, 한쪽이 없으면 표시 없음", () => {
+    expect(yearAgoDelta(46.1, 26.8)).toEqual({ sub: "▲ +19.3%p 1년 전 대비", subTone: "up" });
+    expect(yearAgoDelta(3, 5, "%")).toEqual({ sub: "▼ −2.0% 1년 전 대비", subTone: "down" });
+    expect(yearAgoDelta(null, 5)).toEqual({ sub: undefined, subTone: "muted" });
+    expect(yearAgoDelta(5, undefined)).toEqual({ sub: undefined, subTone: "muted" });
   });
 });
 

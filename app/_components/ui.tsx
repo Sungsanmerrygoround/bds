@@ -1,5 +1,16 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { barPath, seriesPaths } from "@/lib/chart";
+
+/** 목록 표의 단지 이름: 단지 화면(area가 있으면 그 전용면적)으로 가는 링크 + 흐린 위치 */
+export function ComplexLink({ aptSeq, name, where, area }: { aptSeq: string; name: string; where: string; area?: number }) {
+  return (
+    <>
+      <Link href={`/complex/${encodeURIComponent(aptSeq)}${area == null ? "" : `?area=${area}`}`} className="font-medium hover:underline">{name}</Link>
+      <span className="ml-1.5 text-xs text-muted">{where}</span>
+    </>
+  );
+}
 
 export function Card({ title, subtitle, right, children }: { title: ReactNode; subtitle?: string; right?: ReactNode; children: ReactNode }) {
   return (

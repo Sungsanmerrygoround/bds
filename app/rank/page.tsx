@@ -8,19 +8,23 @@ import { deltaTone, formatCount, formatEok, formatPct, formatYm, shortYm } from 
 import { findGroup, groupOptions, groupValue } from "@/lib/params";
 import { getGroups, getRank, type RankRow } from "@/lib/queries";
 import { addMonths, DATA_START, lastCompleteYm, ymOfDate } from "@/lib/range";
-import { pctChange } from "@/lib/stats";
+import { jeonseRatio, pctChange } from "@/lib/stats";
 
 // 단지 순위: 집계가 끝난 최근 12개월 기준.
 // 1년 변동 = 최근 3개월 중위 ÷ 1년 전 같은 3개월 중위 (양쪽 2건 이상일 때만)
 // 최고가 대비 = 최근 3개월 중위(없으면 12개월 중위) ÷ 보관 기간(5년) 최고 거래가
 // 회전율 = 단지 전체(모든 면적) 12개월 매매 건수 ÷ 세대수(K-apt). 세대수가 단지 전체라 면적 필터와 관계없이 전체 거래로 계산한다.
+// 전세가율·갭 = 같은 면적 구간의 12개월 매매 중위와 12개월 전세 중위(갱신 제외) 비교. 전세가 JEONSE_MIN건 미만이면 내지 않는다.
 
 const SORTS = [
   { value: "ppa", label: "평당가", aside: "3.3㎡당" },
   { value: "chg", label: "1년 변동", aside: "3개월 중위" },
   { value: "vol", label: "거래량", aside: "12개월" },
   { value: "peak", label: "최고가 대비", aside: "낮은 순" },
+  { value: "ratio", label: "전세가율", aside: "높은 순" },
+  { value: "gap", label: "갭", aside: "작은 순" },
 ];
+const JEONSE_MIN = 2;
 const MINS = [
   { value: "1", label: "1건+" },
   { value: "3", label: "3건+" },
@@ -40,6 +44,9 @@ interface Ranked extends RankRow {
   peakRatio: number;
   current: number;
   turnover: number | null; // %
+  jeonse: number | null; // 12개월 전세 중위 (표본이 모자라면 null)
+  ratio: number | null; // 전세가율 %
+  gap: number | null; // 매매 중위 − 전세 중위 (만원)
 }
 
 export default async function RankPage({ searchParams }: PageProps<"/rank">) {
@@ -58,9 +65,13 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
     .filter((r) => r.trades_12m >= Number(min) && (hh === "all" || (r.households ?? 0) >= Number(hh)))
     .map((r) => {
       const current = r.recent_count > 0 ? r.recent_median! : r.median_12m;
+      const jeonse = r.jeonse_count_12m >= JEONSE_MIN ? r.jeonse_median_12m : null;
       return {
         ...r,
         current,
+        jeonse,
+        ratio: jeonseRatio(r.median_12m, jeonse),
+        gap: jeonse == null ? null : r.median_12m - jeonse,
         chg: r.recent_count >= 2 && r.year_ago_count >= 2 ? pctChange(r.recent_median, r.year_ago_median) : null,
         peakRatio: (current / r.peak_price) * 100,
         turnover: r.households ? (r.trades_all_12m / r.households) * 100 : null,
@@ -71,6 +82,8 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
     chg: (r) => r.chg,
     vol: (r) => r.trades_12m,
     peak: (r) => -r.peakRatio,
+    ratio: (r) => r.ratio,
+    gap: (r) => (r.gap == null ? null : -r.gap),
   };
   const k = key[sort];
   ranked.sort((a, b) => (k(b) ?? -Infinity) - (k(a) ?? -Infinity) || b.trades_12m - a.trades_12m);
@@ -98,10 +111,12 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
             {group?.name ?? "전체 지역"} · {bandText(band)} · <span className="mono">{period}</span> 매매 기준 {ranked.length}개 단지
             {ranked.length > LIMIT && ` 중 상위 ${LIMIT}개`}
             <span className="text-muted"> · 1년 변동은 최근 3개월과 1년 전 같은 3개월 중위가 비교(양쪽 2건 이상) · 최고가는 {formatYm(DATA_START)} 이후
-              · 세대수는 K-apt(의무관리 단지만) · 회전율은 단지 전체 면적 12개월 매매 ÷ 세대수{hh !== "all" && " · 세대수 필터는 세대수를 아는 단지만"}</span>
+              · 세대수는 K-apt(의무관리 단지만) · 회전율은 단지 전체 면적 12개월 매매 ÷ 세대수{hh !== "all" && " · 세대수 필터는 세대수를 아는 단지만"}
+              · 전세가율·갭은 12개월 매매 중위와 전세 중위(갱신 제외, {JEONSE_MIN}건 이상) 비교
+              {band == null && " — 전체 면적에서는 매매와 전세의 면적 구성이 달라 어긋날 수 있으니 면적을 골라 보세요"}</span>
           </p>
           <div className="panel overflow-x-auto">
-            <table className="mono w-full min-w-[940px] text-[13px]">
+            <table className="mono w-full min-w-[1040px] text-[13px]">
               <thead className="text-xs text-muted">
                 <tr className="text-right">
                   <th className="w-10 px-2 py-2 text-left font-normal">#</th>
@@ -110,10 +125,13 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                   <th className="px-2 font-normal">세대수</th>
                   <th className={`px-2 font-normal ${sort === "ppa" ? "text-ink" : ""}`}>3.3㎡당</th>
                   <th className="px-2 font-normal">12개월 중위</th>
+                  <th className="px-2 font-normal" title="같은 면적 구간 12개월 전세 중위 (갱신 계약 제외)">전세 중위</th>
+                  <th className={`px-2 font-normal ${sort === "ratio" ? "text-ink" : ""}`}>전세가율</th>
+                  <th className={`px-2 font-normal ${sort === "gap" ? "text-ink" : ""}`} title="12개월 매매 중위 − 전세 중위">갭</th>
                   <th className={`px-2 font-normal ${sort === "chg" ? "text-ink" : ""}`}>1년 변동</th>
                   <th className={`px-2 font-normal ${sort === "vol" ? "text-ink" : ""}`}>거래</th>
                   <th className="px-2 font-normal" title="단지 전체 면적 12개월 매매 ÷ 세대수">회전율</th>
-                  <th className={`w-48 px-3 font-normal ${sort === "peak" ? "text-ink" : ""}`}>최고가 대비</th>
+                  <th className={`w-40 px-3 font-normal ${sort === "peak" ? "text-ink" : ""}`}>최고가 대비</th>
                 </tr>
               </thead>
               <tbody>
@@ -133,6 +151,9 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                     <td className="px-2 text-ink-2">{formatCount(r.households)}</td>
                     <td className="px-2 font-medium">{(r.ppa_12m / 10000).toFixed(2)}억</td>
                     <td className="px-2">{formatEok(r.median_12m)}</td>
+                    <td className="px-2 text-ink-2" title={`전세 ${r.jeonse_count_12m}건 (갱신 제외)`}>{formatEok(r.jeonse)}</td>
+                    <td className="px-2">{r.ratio == null ? "-" : `${r.ratio.toFixed(0)}%`}</td>
+                    <td className="px-2">{formatEok(r.gap)}</td>
                     <td className={`px-2 ${toneText[deltaTone(r.chg)]}`}>{formatPct(r.chg)}</td>
                     <td className="px-2">{r.trades_12m}</td>
                     <td className="px-2 text-ink-2">{r.turnover == null ? "-" : `${r.turnover.toFixed(1)}%`}</td>
@@ -147,7 +168,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                     </td>
                   </tr>
                 ))}
-                {shown.length === 0 && <tr><td colSpan={10} className="py-12 text-center text-muted">조건에 맞는 단지가 없습니다.</td></tr>}
+                {shown.length === 0 && <tr><td colSpan={13} className="py-12 text-center text-muted">조건에 맞는 단지가 없습니다.</td></tr>}
               </tbody>
             </table>
           </div>

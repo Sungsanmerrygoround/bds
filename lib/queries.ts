@@ -27,9 +27,15 @@ export interface TrendRow {
   jeonse_count: number;
 }
 
-export async function getTrend(groupId: number, band: number | null, from: string, to: string): Promise<TrendRow[]> {
+/** 전세 중위가 기준: new = 갱신 계약 제외(지금 새로 계약하는 시세), all = 갱신 포함 전체 */
+export type JeonseBasis = "new" | "all";
+
+/** jeonse_median·jeonse_count는 고른 기준의 값 (기본: 갱신 제외) */
+export async function getTrend(groupId: number, band: number | null, from: string, to: string, jeonse: JeonseBasis = "new"): Promise<TrendRow[]> {
   const res = await db().rpc("trend_monthly", { p_group_id: groupId, p_area_band: band, p_from: from, p_to: to });
-  return check(res, "trend_monthly") as TrendRow[];
+  const rows = check(res, "trend_monthly") as (TrendRow & { jeonse_new_median: number | null; jeonse_new_count: number })[];
+  return rows.map(({ jeonse_new_median, jeonse_new_count, ...r }) =>
+    jeonse === "new" ? { ...r, jeonse_median: jeonse_new_median, jeonse_count: jeonse_new_count } : r);
 }
 
 // ---------- 이벤트 ----------
@@ -223,8 +229,10 @@ export interface ComplexStats {
   last_price: number | null;
   trade_median_6m: number | null;
   trade_count_6m: number | null;
-  jeonse_median_6m: number | null;
+  jeonse_median_6m: number | null; // 갱신 포함 전체
   jeonse_count_6m: number | null;
+  jeonse_new_median_6m: number | null; // 갱신 제외
+  jeonse_new_count_6m: number | null;
   peak_price: number | null;
   peak_date: string | null;
   event_type: "NEW_HIGH" | "DROP" | null;
@@ -258,6 +266,8 @@ export interface RankRow {
   peak_date: string;
   households: number | null; // K-apt 세대수 (짝 없는 단지는 null)
   trades_all_12m: number; // 면적 구간과 관계없이 단지 전체 12개월 매매 (회전율용)
+  jeonse_median_12m: number | null; // 같은 면적 구간 12개월 전세 중위 (갱신 제외)
+  jeonse_count_12m: number;
 }
 
 export async function getRank(groupId: number | null, band: number | null, end: string): Promise<RankRow[]> {
@@ -311,6 +321,102 @@ export interface RenewalDrop {
 export async function getRenewalDrops(groupId: number | null, band: number | null, since: string, limit = 50): Promise<RenewalDrop[]> {
   const res = await db().rpc("renewal_drops", { p_group_id: groupId, p_area_band: band, p_since: since, p_limit: limit });
   return check(res, "renewal_drops") as RenewalDrop[];
+}
+
+// ---------- 월세 ----------
+
+export interface RentMonthlyRow {
+  ym: string;
+  jeonse_count: number;
+  wolse_count: number;
+  jeonse_new_count: number; // 갱신 제외
+  wolse_new_count: number;
+  wolse_deposit_median: number | null; // 갱신 제외 월세의 보증금 중위
+  wolse_rent_median: number | null;
+  conv_rate_median: number | null; // 전월세 전환율(%) 중위
+  conv_count: number; // 전환율을 계산할 수 있었던 계약 수
+}
+
+export async function getRentMonthly(groupId: number | null, band: number | null, from: string, to: string): Promise<RentMonthlyRow[]> {
+  const res = await db().rpc("rent_monthly", { p_group_id: groupId, p_area_band: band, p_from: from, p_to: to });
+  return (check(res, "rent_monthly") as RentMonthlyRow[]).map((r) => ({
+    ...r,
+    conv_rate_median: r.conv_rate_median == null ? null : Number(r.conv_rate_median), // numeric은 문자열로 온다
+  }));
+}
+
+// ---------- 새로 신고된 거래 ----------
+
+interface NewDeal {
+  id: number;
+  first_seen_at: string;
+  apt_seq: string;
+  apt_nm: string;
+  umd_nm: string | null;
+  sigungu_name: string;
+  area_type: number;
+  floor: number | null;
+  deal_date: string;
+}
+
+export interface NewTrade extends NewDeal {
+  price_man: number;
+  is_direct: boolean;
+  is_cancelled: boolean;
+  prev_price: number | null; // 같은 단지·면적의 직전 유효 거래
+  prev_date: string | null;
+  event_type: "NEW_HIGH" | "DROP" | null;
+  event_pct: number | null;
+}
+
+export interface NewRent extends NewDeal {
+  deposit_man: number;
+  monthly_rent_man: number;
+  contract_type: string | null;
+  use_rr_right: boolean | null;
+  pre_deposit_man: number | null;
+  pre_monthly_rent_man: number | null;
+}
+
+export const NEW_DEAL_LIMIT = 500;
+
+/** since(ISO 시각) 이후 수집에서 처음 본 매매, 최근 수집 순 */
+export async function getNewTrades(since: string, groupId: number | null): Promise<NewTrade[]> {
+  const res = await db().rpc("new_trades", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT });
+  return (check(res, "new_trades") as NewTrade[]).map((r) => ({ ...r, event_pct: r.event_pct == null ? null : Number(r.event_pct) }));
+}
+
+export async function getNewRents(since: string, groupId: number | null): Promise<NewRent[]> {
+  const res = await db().rpc("new_rents", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT });
+  return check(res, "new_rents") as NewRent[];
+}
+
+// ---------- 해제된 거래 ----------
+
+export interface CancelledTrade {
+  id: number;
+  apt_seq: string;
+  apt_nm: string;
+  umd_nm: string | null;
+  sigungu_name: string;
+  area_type: number;
+  floor: number | null;
+  deal_date: string;
+  cancel_date: string;
+  price_man: number;
+  is_direct: boolean;
+  prev_max: number | null; // 계약일 직전 36개월 유효 거래 최고가
+  prev_count: number;
+  later_count: number; // 계약일 뒤 ~ 해제일 사이 같은 단지·면적 유효 거래
+  later_max: number | null;
+}
+
+export const CANCELLED_LIMIT = 1000;
+
+/** since(YYYY-MM-DD) 이후 해제된 매매, 최근 해제 순 */
+export async function getCancelledTrades(groupId: number | null, since: string): Promise<CancelledTrade[]> {
+  const res = await db().rpc("cancelled_trades", { p_group_id: groupId, p_since: since, p_limit: CANCELLED_LIMIT });
+  return check(res, "cancelled_trades") as CancelledTrade[];
 }
 
 // ---------- 입주 물량 ----------
