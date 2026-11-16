@@ -55,11 +55,18 @@ export default async function WatchPage() {
             <span className="text-muted"> 단지마다 최근 2년 매매가 가장 많은 면적 기준, 중위가는 최근 6개월. 전세는 갱신 계약 제외.</span>
           </p>
         </div>
-        {rows.length >= 2 && (
-          <Link href={compareHref} className="flex min-h-10 items-center rounded bg-s1 px-4 text-sm font-semibold text-page">
-            {rows.length > COMPARE_MAX ? `앞의 ${COMPARE_MAX}개 비교하기` : "추이 비교하기"}
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {rows.length >= 1 && (
+            <Link href="/new?fav=1&d=14" className="flex min-h-10 items-center rounded border border-line px-4 text-sm text-ink-2 hover:bg-wash">
+              새로 신고된 거래 보기
+            </Link>
+          )}
+          {rows.length >= 2 && (
+            <Link href={compareHref} className="flex min-h-10 items-center rounded bg-s1 px-4 text-sm font-semibold text-page">
+              {rows.length > COMPARE_MAX ? `앞의 ${COMPARE_MAX}개 비교하기` : "추이 비교하기"}
+            </Link>
+          )}
+        </div>
       </div>
 
       {favs.length === 0 ? (

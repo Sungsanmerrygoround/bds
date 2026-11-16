@@ -1,6 +1,9 @@
+import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
-import { Dimmed, FilterBar, FilterScope, ParamSelect } from "../_components/Filters";
+import { FavButton } from "../_components/FavButton";
+import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Badge, ComplexLink, Stat, toneText } from "../_components/ui";
+import { getFavorites } from "@/lib/favorites";
 import { deltaTone, formatEok, formatPct, shortDate } from "@/lib/format";
 import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
 import { getGroups, getNewRents, getNewTrades, NEW_DEAL_LIMIT, type NewRent, type NewTrade } from "@/lib/queries";
@@ -10,12 +13,14 @@ import { isNewContract, median, pctChange } from "@/lib/stats";
 // 새로 신고된 거래: 수집에서 처음 본 날(first_seen_at) 기준.
 // 실거래는 계약 후 30일 안에 신고하므로 계약일 순 목록에서는 새 거래가 지난달 사이사이에 끼어 눈에 안 띈다.
 // 매일 아침 수집이라 '수집일'은 대체로 신고 다음 날이다.
+// 알림 대신 이 화면을 본다: '관심 단지만'(?fav=1)을 켜면 이 브라우저에 ★로 저장한 단지의 새 거래만 나온다.
 
 const PERIODS = [
   { value: "1", label: "오늘 수집분" },
   { value: "3", label: "최근 3일" },
   { value: "7", label: "최근 7일" },
   { value: "14", label: "최근 14일" },
+  { value: "30", label: "최근 30일" },
 ];
 const KINDS = [
   { value: "trade", label: "매매" },
@@ -38,10 +43,15 @@ function byDay<T extends { first_seen_at: string }>(rows: T[]): { day: string; r
   return out;
 }
 
-function ComplexCell({ r }: { r: { apt_seq: string; apt_nm: string; umd_nm: string | null; sigungu_name: string; area_type: number } }) {
+function ComplexCell({ r, fav }: { r: { apt_seq: string; apt_nm: string; umd_nm: string | null; sigungu_name: string; area_type: number }; fav: boolean }) {
   return (
     <td className="px-3 text-left font-sans">
-      <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} where={`${r.sigungu_name} ${r.umd_nm ?? ""}`} area={r.area_type} />
+      <span className="flex items-center gap-1">
+        <FavButton aptSeq={r.apt_seq} on={fav} name={r.apt_nm} />
+        <span className="min-w-0">
+          <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} where={`${r.sigungu_name} ${r.umd_nm ?? ""}`} area={r.area_type} />
+        </span>
+      </span>
     </td>
   );
 }
@@ -67,19 +77,28 @@ function DayRows<T extends { id: number; first_seen_at: string }>({ groups, cols
 export default async function NewDealsPage({ searchParams }: PageProps<"/new">) {
   const sp = await searchParams;
   const str = (k: string) => paramStr(sp[k]);
-  const groups = await getGroups();
+  const [groups, favs] = await Promise.all([getGroups(), getFavorites()]);
   const groupId = findGroup(groups, sp.g)?.id ?? null;
   const days = PERIODS.find((p) => p.value === str("d"))?.value ?? "3";
   const kind = str("kind") === "rent" ? "rent" : "trade";
+  const favOnly = str("fav") === "1";
+  const favSet = new Set(favs);
+  // 관심 단지만: DB에서 그 단지들로 좁힌다 (전체에서 최근 N건을 받아 거르면 건수 제한에 잘린다). 관심 단지가 없으면 조회하지 않는다.
+  const only = favOnly ? favs : undefined;
+  const skip = favOnly && favs.length === 0;
 
   const today = todayKst();
   const wanted = addDays(today, -(Number(days) - 1));
   const sinceDay = wanted > FIRST_SEEN_FLOOR ? wanted : FIRST_SEEN_FLOOR;
   const since = `${sinceDay}T00:00:00+09:00`;
   const [trades, rents] = await Promise.all([
-    kind === "trade" ? getNewTrades(since, groupId) : Promise.resolve([] as NewTrade[]),
-    kind === "rent" ? getNewRents(since, groupId) : Promise.resolve([] as NewRent[]),
+    kind === "trade" && !skip ? getNewTrades(since, groupId, only) : Promise.resolve([] as NewTrade[]),
+    kind === "rent" && !skip ? getNewRents(since, groupId, only) : Promise.resolve([] as NewRent[]),
   ]);
+  const favCount = (kind === "trade" ? trades : rents).filter((r) => favSet.has(r.apt_seq)).length;
+  const empty = skip
+    ? <>아직 관심 단지가 없습니다. 이 목록이나 <Link href="/rank" className="underline">순위</Link>·단지 화면에서 ☆를 누르면 여기서 그 단지의 새 거래만 볼 수 있습니다.</>
+    : `이 기간에 새로 수집된 ${favOnly ? "관심 단지 " : ""}${kind === "trade" ? "매매가" : "전월세가"} 없습니다.`;
   const count = kind === "trade" ? trades.length : rents.length;
 
   // 매매 요약: 해제된 채 들어온 거래는 가격 비교에서 뺀다
@@ -105,6 +124,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
         <ParamSelect label="종류" param="kind" value={kind} options={KINDS} />
         <ParamSelect label="수집일" param="d" value={days} options={PERIODS} />
         <ParamSelect label="지역" param="g" value={groupValue(groupId)} options={groupOptions(groups)} />
+        <ParamToggle label={`★ 관심 단지만 (${favs.length}개)`} param="fav" checked={favOnly} />
       </FilterBar>
 
       <Dimmed>
@@ -125,6 +145,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
         )}
 
         {count >= NEW_DEAL_LIMIT && <p className="mb-2 text-sm text-muted">최근 {NEW_DEAL_LIMIT}건까지만 표시합니다. 기간이나 지역을 좁혀 보세요.</p>}
+        {!favOnly && favCount > 0 && <p className="mb-2 text-sm text-warn">★ 이 중 관심 단지 거래 {favCount}건</p>}
 
         <div className="panel overflow-x-auto">
           {kind === "trade" ? (
@@ -152,7 +173,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
                           {shortDate(t.deal_date)}
                           <span className="ml-1.5 text-[11px] text-muted" title="계약일부터 수집일까지">{late}일</span>
                         </td>
-                        <ComplexCell r={t} />
+                        <ComplexCell r={t} fav={favSet.has(t.apt_seq)} />
                         <td className="px-3">{t.area_type}㎡</td>
                         <td className="px-3">{t.floor ?? "-"}</td>
                         <td className="px-3 font-medium">{formatEok(t.price_man)}</td>
@@ -173,7 +194,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
                     );
                   }}
                 </DayRows>
-                {trades.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-muted">이 기간에 새로 수집된 매매가 없습니다.</td></tr>}
+                {trades.length === 0 && <tr><td colSpan={8} className="py-12 text-center font-sans text-muted">{empty}</td></tr>}
               </tbody>
             </table>
           ) : (
@@ -198,7 +219,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
                     return (
                       <tr key={r.id} className="border-t border-line text-right hover:bg-wash">
                         <td className="px-3 py-2 text-left">{shortDate(r.deal_date)}</td>
-                        <ComplexCell r={r} />
+                        <ComplexCell r={r} fav={favSet.has(r.apt_seq)} />
                         <td className="px-3">{r.area_type}㎡</td>
                         <td className="px-3">{r.floor ?? "-"}</td>
                         <td className="px-3 font-medium">{formatEok(r.deposit_man)}</td>
@@ -219,7 +240,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
                     );
                   }}
                 </DayRows>
-                {rents.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-muted">이 기간에 새로 수집된 전월세가 없습니다.</td></tr>}
+                {rents.length === 0 && <tr><td colSpan={8} className="py-12 text-center font-sans text-muted">{empty}</td></tr>}
               </tbody>
             </table>
           )}

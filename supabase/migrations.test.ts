@@ -297,6 +297,20 @@ describe("new_trades · new_rents", () => {
     expect(r.rows[0]).toMatchObject({ deposit_man: 52500, monthly_rent_man: 0, contract_type: "갱신", pre_deposit_man: 50000 });
     expect((await db.query("select 1 from new_rents(now() + interval '1 hour', null)")).rows).toHaveLength(0);
   });
+
+  it("단지 목록을 주면 그 단지들만 (관심 단지), 빈 목록이면 없음", async () => {
+    const since = "now() - interval '1 hour'";
+    const seqs = async (fn: string, list: string) =>
+      [...new Set((await db.query<{ apt_seq: string }>(`select apt_seq from ${fn}(${since}, null, 5000, ${list})`)).rows.map((r) => r.apt_seq))].sort();
+    expect(await seqs("new_trades", "array['N-1', 'C-9']")).toEqual(["N-1"]);
+    expect(await seqs("new_trades", "array['N-1', 'R-1']")).toEqual(["N-1", "R-1"]);
+    expect(await seqs("new_trades", "array[]::text[]")).toEqual([]);
+    expect((await seqs("new_trades", "null")).length).toBeGreaterThan(2);
+    expect(await seqs("new_rents", "array['N-1']")).toEqual(["N-1"]);
+    expect(await seqs("new_rents", "array['T-1']")).toEqual([]);
+    // 그룹 조건과 함께: 다른 그룹이면 없음
+    expect((await db.query("select 1 from new_trades(now() - interval '1 hour', 2, 5000, array['N-1'])")).rows).toHaveLength(0);
+  });
 });
 
 describe("cancelled_trades", () => {

@@ -380,14 +380,14 @@ export interface NewRent extends NewDeal {
 
 export const NEW_DEAL_LIMIT = 500;
 
-/** since(ISO 시각) 이후 수집에서 처음 본 매매, 최근 수집 순 */
-export async function getNewTrades(since: string, groupId: number | null): Promise<NewTrade[]> {
-  const res = await db().rpc("new_trades", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT });
+/** since(ISO 시각) 이후 수집에서 처음 본 매매, 최근 수집 순. aptSeqs를 주면 그 단지들만 (관심 단지) */
+export async function getNewTrades(since: string, groupId: number | null, aptSeqs?: string[]): Promise<NewTrade[]> {
+  const res = await db().rpc("new_trades", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT, p_apt_seqs: aptSeqs ?? null });
   return (check(res, "new_trades") as NewTrade[]).map((r) => ({ ...r, event_pct: r.event_pct == null ? null : Number(r.event_pct) }));
 }
 
-export async function getNewRents(since: string, groupId: number | null): Promise<NewRent[]> {
-  const res = await db().rpc("new_rents", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT });
+export async function getNewRents(since: string, groupId: number | null, aptSeqs?: string[]): Promise<NewRent[]> {
+  const res = await db().rpc("new_rents", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT, p_apt_seqs: aptSeqs ?? null });
   return check(res, "new_rents") as NewRent[];
 }
 
