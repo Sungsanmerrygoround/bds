@@ -1,31 +1,31 @@
 import Link from "next/link";
-import { FavButton } from "../_components/FavButton";
+import { inputCls, outlineLinkCls } from "../_components/styles";
+import { ComplexLink, EmptyRow } from "../_components/ui";
 import { getFavorites } from "@/lib/favorites";
-import { findGroup } from "@/lib/params";
+import { findGroup, paramStr } from "@/lib/params";
 import { getGroups, searchComplexes } from "@/lib/queries";
 
 export default async function ComplexSearchPage({ searchParams }: PageProps<"/complex">) {
   const sp = await searchParams;
-  const q = typeof sp.q === "string" ? sp.q.trim() : "";
+  const q = paramStr(sp.q)?.trim() ?? "";
   const [groups, favs] = await Promise.all([getGroups(), getFavorites()]);
   const groupId = findGroup(groups, sp.g)?.id ?? null;
   const rows = await searchComplexes(q, groupId);
-  const input = "min-h-10 rounded border border-line bg-surface-2 px-2.5 text-sm text-ink";
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">단지</h1>
-        <Link href="/complex/compare" className="flex min-h-10 items-center rounded border border-line px-3 text-sm text-ink-2 hover:bg-wash">단지 비교</Link>
+        <Link href="/complex/compare" className={outlineLinkCls}>단지 비교</Link>
       </div>
       <form className="panel mb-4 flex flex-wrap items-end gap-3 px-4 py-3" action="/complex">
         <label className="block">
           <span className="cap mb-1 block">단지명</span>
-          <input name="q" defaultValue={q} placeholder="예: 고덕아르테온" className={`${input} w-56`} />
+          <input name="q" defaultValue={q} placeholder="예: 고덕아르테온" className={`${inputCls} w-56`} />
         </label>
         <label className="block">
           <span className="cap mb-1 block">지역</span>
-          <select name="g" defaultValue={groupId ? String(groupId) : ""} className={input}>
+          <select name="g" defaultValue={groupId ? String(groupId) : ""} className={inputCls}>
             <option value="">전체</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
@@ -51,10 +51,7 @@ export default async function ComplexSearchPage({ searchParams }: PageProps<"/co
             {rows.map((r) => (
               <tr key={r.apt_seq} className="border-t border-line text-right hover:bg-wash">
                 <td className="px-3 py-2 text-left font-sans">
-                  <span className="flex items-center gap-1">
-                    <FavButton aptSeq={r.apt_seq} on={favs.includes(r.apt_seq)} name={r.apt_nm} />
-                    <Link href={`/complex/${encodeURIComponent(r.apt_seq)}`} className="font-medium hover:underline">{r.apt_nm}</Link>
-                  </span>
+                  <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} fav={favs.includes(r.apt_seq)} />
                 </td>
                 <td className="px-3 text-left font-sans text-ink-2">{r.sigungu_name} {r.umd_nm}</td>
                 <td className="px-3">{r.build_year ?? "-"}</td>
@@ -62,9 +59,7 @@ export default async function ComplexSearchPage({ searchParams }: PageProps<"/co
                 <td className="px-3 text-ink-2">{r.last_deal_date ?? "-"}</td>
               </tr>
             ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={5} className="py-12 text-center text-muted">검색 결과가 없습니다.</td></tr>
-            )}
+            {rows.length === 0 && <EmptyRow cols={5}>검색 결과가 없습니다.</EmptyRow>}
           </tbody>
         </table>
       </div>

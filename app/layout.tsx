@@ -76,7 +76,7 @@ function Ticker({ rows }: { rows: TickerRow[] }) {
             <span className="text-ink">{r.complexes.apt_nm}</span>
             <span className="mono text-muted">{r.area_type}㎡</span>
             <span className="mono text-ink">{formatEok(r.price_man)}</span>
-            <span className="mono text-up">+{Number(r.change_pct).toFixed(1)}%</span>
+            <span className="mono text-up">+{r.change_pct.toFixed(1)}%</span>
           </Link>
         ))}
       </div>

@@ -5,6 +5,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { ReactNode } from "react";
+import { formatCount, formatHouseholds } from "@/lib/format";
 
 // 공통: 가로축 = 시간. 월 단위 차트는 기간 내 모든 달을 채워 넣어 간격이 실제 시간과 같다.
 
@@ -143,14 +144,14 @@ type SupplySeries = { key: string; label: string; color: string };
 export function SupplyChart({ data, series, relocation = [], nowYm }: { data: SupplyPoint[]; series: SupplySeries[]; relocation?: SupplySeries[]; nowYm: string }) {
   const sum = (d: SupplyPoint, xs: SupplySeries[]) => xs.reduce((s, x) => s + Math.abs(Number(d[x.key] ?? 0)), 0);
   const rows = (d: SupplyPoint, xs: SupplySeries[], suffix: string) =>
-    xs.filter((x) => Number(d[x.key] ?? 0) !== 0).map((x) => ({ color: x.color, label: `${x.label}${suffix}`, value: `${Math.abs(Number(d[x.key])).toLocaleString()}세대` }));
+    xs.filter((x) => Number(d[x.key] ?? 0) !== 0).map((x) => ({ color: x.color, label: `${x.label}${suffix}`, value: formatHouseholds(Math.abs(Number(d[x.key]))) }));
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer>
         <BarChart data={data} margin={{ top: 16, right: 16, bottom: 0, left: 4 }} barCategoryGap="15%" stackOffset="sign">
           <CartesianGrid vertical={false} stroke="var(--grid)" />
           <XAxis dataKey="ym" ticks={monthTicks(data.map((d) => d.ym))} tickFormatter={ymLabel} {...AXIS} />
-          <YAxis width={56} axisLine={false} allowDecimals={false} tickFormatter={(v: number) => Math.abs(v).toLocaleString()} {...AXIS} />
+          <YAxis width={56} axisLine={false} allowDecimals={false} tickFormatter={(v: number) => formatCount(Math.abs(v))} {...AXIS} />
           {relocation.length > 0 && <ReferenceLine y={0} stroke="var(--axis)" />}
           <ReferenceLine x={nowYm} stroke="var(--muted)" strokeDasharray="3 3" label={{ value: "이번 달", position: "top", fill: "var(--muted)", fontSize: 11 }} />
           <Tooltip
@@ -164,7 +165,7 @@ export function SupplyChart({ data, series, relocation = [], nowYm }: { data: Su
                   title={`${d.ym.slice(0, 4)}년 ${Number(d.ym.slice(4, 6))}월 입주 예정`}
                   rows={[
                     ...rows(d, series, ""),
-                    { label: "합계", value: `${sum(d, series).toLocaleString()}세대` },
+                    { label: "합계", value: formatHouseholds(sum(d, series)) },
                     ...rows(d, relocation, " 이주"),
                   ]}
                   note={moved > 0 ? "이주 = 재건축·재개발로 집을 비우는 세대 (직접 입력)" : undefined}

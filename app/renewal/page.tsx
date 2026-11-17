@@ -1,12 +1,12 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { MetricChart } from "../_components/MetricChart";
 import { RateChart } from "../_components/RateChart";
-import { Badge, ComplexLink, Stat } from "../_components/ui";
+import { Badge, ComplexLink, EmptyRow, MonthLabel, Stat, TableDetails } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { formatEok, formatYm, shortYm, signedPct, yearAgoDelta } from "@/lib/format";
 import { sharePct } from "@/lib/stats";
 import { getGroups, getRenewal, getRenewalDrops, type RenewalRow } from "@/lib/queries";
-import { findGroup, groupOptions, groupValue } from "@/lib/params";
+import { findGroup, groupLabel, groupOptions, groupValue } from "@/lib/params";
 import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, monthStart, partialFromYm, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 
 // 전세 갱신 분석: 국토부 전월세 신고의 계약 구분(신규/갱신)·갱신요구권·종전 보증금으로
@@ -45,13 +45,13 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
 
   const now = at(lastDone), ago = at(addMonths(lastDone, -12));
 
-  const where = `${group?.name ?? "전체 지역"} · ${bandText(band)}`;
+  const where = `${groupLabel(group)} · ${bandText(band)}`;
 
   return (
     <FilterScope>
       <h1 className="sr-only">전세 갱신</h1>
       <RailLayout
-        summary={[group?.name ?? "전체 지역", bandText(band), rangeLabel(range)]}
+        summary={[groupLabel(group), bandText(band), rangeLabel(range)]}
         rail={
           <>
             <OptionList label="지역" param="g" value={groupValue(groupId)} cols={2} options={groupOptions(groups)} />
@@ -130,18 +130,16 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
                       <td>{r.floor ?? "-"}</td>
                       <td className="text-ink-2">{formatEok(r.pre_deposit_man)}</td>
                       <td className="font-medium">{formatEok(r.deposit_man)}</td>
-                      <td className="text-down">{Number(r.change_pct).toFixed(1)}%</td>
+                      <td className="text-down">{r.change_pct.toFixed(1)}%</td>
                     </tr>
                   ))}
-                  {drops.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-muted">최근 3개월에 보증금을 낮춘 갱신이 없습니다.</td></tr>}
+                  {drops.length === 0 && <EmptyRow cols={7} className="py-10">최근 3개월에 보증금을 낮춘 갱신이 없습니다.</EmptyRow>}
                 </tbody>
               </table>
             </div>
           </section>
 
-          <details className="panel px-4 py-3 text-sm">
-            <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">표로 보기</summary>
-            <div className="overflow-x-auto">
+          <TableDetails>
               <table className="mono mt-2 w-full min-w-[720px] text-right text-xs">
                 <thead className="text-muted">
                   <tr>
@@ -161,7 +159,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
                     const r = at(m);
                     return (
                       <tr key={m} className="border-t border-line">
-                        <td className="py-1.5 text-left">{formatYm(m)}{m >= partialYm && <span className="ml-1.5 text-s2">집계 중</span>}</td>
+                        <td className="py-1.5 text-left"><MonthLabel ym={m} partial={m >= partialYm} /></td>
                         <td>{r?.new_count ?? 0}</td>
                         <td>{r?.renew_count ?? 0}</td>
                         <td>{r?.rr_count ?? 0}</td>
@@ -175,8 +173,7 @@ export default async function RenewalPage({ searchParams }: PageProps<"/renewal"
                   })}
                 </tbody>
               </table>
-            </div>
-          </details>
+          </TableDetails>
         </Dimmed>
       </RailLayout>
     </FilterScope>

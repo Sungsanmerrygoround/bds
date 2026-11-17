@@ -1,8 +1,9 @@
 import { EventTabs } from "../../_components/EventTabs";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../../_components/Filters";
-import { Badge, ComplexLink, Stat } from "../../_components/ui";
+import { Badge, ComplexLink, EmptyRow, PageHeader, Stat } from "../../_components/ui";
+import { SAMPLE_OPTIONS } from "../options";
 import { formatEok, formatPct } from "@/lib/format";
-import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
+import { findGroup, findOption, groupOptions, groupValue } from "@/lib/params";
 import { CANCELLED_LIMIT, getCancelledTrades, getGroups, type CancelledTrade } from "@/lib/queries";
 import { daysBetween, monthsAgo } from "@/lib/range";
 import { median, pctChange } from "@/lib/stats";
@@ -17,24 +18,18 @@ const PERIODS = [
   { value: "36", label: "최근 3년" },
   { value: "60", label: "최근 5년" },
 ];
-const SAMPLES = [
-  { value: "1", label: "1건 이상" },
-  { value: "3", label: "3건 이상" },
-  { value: "10", label: "10건 이상" },
-];
 
 /** 계약 당시 신고가였나: 직전 36개월 비교 거래가 minSamples건 이상이고 그 최고가를 넘었다 */
 const wasHigh = (t: CancelledTrade, minSamples: number) => t.prev_max != null && t.prev_count >= minSamples && t.price_man > t.prev_max;
 
 export default async function CancelledPage({ searchParams }: PageProps<"/events/cancelled">) {
   const sp = await searchParams;
-  const str = (k: string) => paramStr(sp[k]);
   const groups = await getGroups();
   const groupId = findGroup(groups, sp.g)?.id ?? null;
-  const months = PERIODS.find((p) => p.value === str("m"))?.value ?? "12";
-  const minSamples = Number(SAMPLES.find((s) => s.value === str("n"))?.value ?? "1");
-  const showAll = str("all") === "1";
-  const excludeDirect = str("nodirect") === "1";
+  const months = findOption(PERIODS, sp.m)?.value ?? "12";
+  const minSamples = Number(findOption(SAMPLE_OPTIONS, sp.n)?.value ?? "1");
+  const showAll = sp.all === "1";
+  const excludeDirect = sp.nodirect === "1";
 
   const fetched = await getCancelledTrades(groupId, monthsAgo(Number(months)));
   const all = fetched.filter((t) => !excludeDirect || !t.is_direct);
@@ -47,16 +42,15 @@ export default async function CancelledPage({ searchParams }: PageProps<"/events
 
   return (
     <FilterScope>
-      <h1 className="mb-1 text-2xl font-semibold">해제된 거래</h1>
-      <p className="mb-3 text-sm text-ink-2">
+      <PageHeader title="해제된 거래" gap="mb-3">
         신고된 뒤 계약이 해제된 매매. 신고가 = 계약일 직전 36개월, 같은 단지·같은 전용면적(소수 첫째 자리) 유효 거래의 최고가 초과.
         <span className="text-muted"> 해제 사유(단순 변심, 대출 불가, 재계약 등)는 신고 자료에 없어 알 수 없습니다.</span>
-      </p>
+      </PageHeader>
       <EventTabs active="/events/cancelled" />
       <FilterBar>
         <ParamSelect label="해제일" param="m" value={months} options={PERIODS} />
         <ParamSelect label="지역" param="g" value={groupValue(groupId)} options={groupOptions(groups)} />
-        <ParamSelect label="비교 거래 수" param="n" value={String(minSamples)} options={SAMPLES} />
+        <ParamSelect label="비교 거래 수" param="n" value={String(minSamples)} options={SAMPLE_OPTIONS} />
         <ParamToggle label="직거래 제외" param="nodirect" checked={excludeDirect} />
         <ParamToggle label="신고가가 아닌 해제도 표시" param="all" checked={showAll} />
       </FilterBar>
@@ -125,9 +119,7 @@ export default async function CancelledPage({ searchParams }: PageProps<"/events
                   </tr>
                 );
               })}
-              {rows.length === 0 && (
-                <tr><td colSpan={9} className="py-12 text-center text-muted">조건에 맞는 해제 거래가 없습니다.</td></tr>
-              )}
+              {rows.length === 0 && <EmptyRow cols={9}>조건에 맞는 해제 거래가 없습니다.</EmptyRow>}
             </tbody>
           </table>
         </div>

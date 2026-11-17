@@ -1,10 +1,10 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { MetricChart } from "../_components/MetricChart";
 import { rateValues } from "../_components/RateChart";
-import { Stat } from "../_components/ui";
+import { MonthLabel, Stat, TableDetails } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { formatEok, formatYm, shortYm, yearAgoDelta } from "@/lib/format";
-import { findGroup, groupOptions, groupValue } from "@/lib/params";
+import { findGroup, groupLabel, groupOptions, groupValue } from "@/lib/params";
 import { getGroups, getRates, getRentMonthly, type RentMonthlyRow } from "@/lib/queries";
 import { sharePct } from "@/lib/stats";
 import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, partialFromYm, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
@@ -41,13 +41,13 @@ export default async function RentPage({ searchParams }: PageProps<"/rent">) {
   const enough = (r?: RentMonthlyRow) => !!r && r.wolse_new_count >= MIN_N;
 
   const now = at(lastDone), ago = at(addMonths(lastDone, -12));
-  const where = `${group?.name ?? "전체 지역"} · ${bandText(band)}`;
+  const where = `${groupLabel(group)} · ${bandText(band)}`;
 
   return (
     <FilterScope>
       <h1 className="sr-only">월세</h1>
       <RailLayout
-        summary={[group?.name ?? "전체 지역", bandText(band), rangeLabel(range)]}
+        summary={[groupLabel(group), bandText(band), rangeLabel(range)]}
         rail={
           <>
             <OptionList label="지역" param="g" value={groupValue(group?.id)} cols={2} options={groupOptions(groups)} />
@@ -99,9 +99,7 @@ export default async function RentPage({ searchParams }: PageProps<"/rent">) {
             낮으면 월세가 유리합니다. 법정 상한은 계약 중에 전세를 월세로 돌릴 때 적용되는 값이라 참고선입니다. 금리는 전국 값(한국은행 ECOS)이고 한두 달 늦게 발표됩니다.
           </MetricChart>
 
-          <details className="panel px-4 py-3 text-sm">
-            <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">표로 보기</summary>
-            <div className="overflow-x-auto">
+          <TableDetails>
               <table className="mono mt-2 w-full min-w-[760px] text-right text-xs">
                 <thead className="text-muted">
                   <tr>
@@ -122,7 +120,7 @@ export default async function RentPage({ searchParams }: PageProps<"/rent">) {
                     const r = at(m);
                     return (
                       <tr key={m} className="border-t border-line">
-                        <td className="py-1.5 text-left">{formatYm(m)}{m >= partialYm && <span className="ml-1.5 text-s2">집계 중</span>}</td>
+                        <td className="py-1.5 text-left"><MonthLabel ym={m} partial={m >= partialYm} /></td>
                         <td>{r?.jeonse_count ?? 0}</td>
                         <td>{r?.wolse_count ?? 0}</td>
                         <td>{r?.jeonse_new_count ?? 0}</td>
@@ -137,8 +135,7 @@ export default async function RentPage({ searchParams }: PageProps<"/rent">) {
                   })}
                 </tbody>
               </table>
-            </div>
-          </details>
+          </TableDetails>
         </Dimmed>
       </RailLayout>
     </FilterScope>

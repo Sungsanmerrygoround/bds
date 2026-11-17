@@ -190,6 +190,17 @@ export function changePct(values: (number | null)[], i: number, back = 1): numbe
   return a == null || b == null || i - back < 0 || b === 0 ? null : (a / b - 1) * 100;
 }
 
+/** 주간 지수 행에서 한 지역·한 종류의 값을 weeks 순서로 (없는 주는 null) */
+export function weeklyValues(
+  rows: { region_id: number; kind: string; week_date: string; value: number }[],
+  regionId: number,
+  kind: string,
+  weeks: string[],
+): (number | null)[] {
+  const at = new Map(rows.filter((r) => r.region_id === regionId && r.kind === kind).map((r) => [r.week_date, r.value]));
+  return weeks.map((d) => at.get(d) ?? null);
+}
+
 /** 첫 값 = 100 으로 다시 맞춘 지수 (기간 시작 대비 상대 변화) */
 export function rebase(values: (number | null)[]): (number | null)[] {
   const base = values.find((v): v is number => v != null);

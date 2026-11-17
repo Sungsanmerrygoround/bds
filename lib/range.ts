@@ -53,6 +53,15 @@ export function monthsBetween(from: string, to: string): string[] {
   return out;
 }
 
+/** 월별 행(ym)을 months 순서의 값 배열로 맞춘다. 행이 없는 달은 null */
+export function byMonth<T extends { ym: string }, V>(months: string[], rows: T[], pick: (r: T) => V): (V | null)[] {
+  const at = new Map(rows.map((r) => [r.ym, r]));
+  return months.map((m) => {
+    const r = at.get(m);
+    return r ? pick(r) : null;
+  });
+}
+
 const isYm = (v: unknown): v is string =>
   typeof v === "string" && /^\d{6}$/.test(v) && Number(v.slice(4)) >= 1 && Number(v.slice(4)) <= 12;
 

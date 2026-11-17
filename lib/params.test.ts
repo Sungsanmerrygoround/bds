@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findGroup, groupOptions, groupValue, isAptSeq, paramStr, safeDecode } from "./params";
+import { findGroup, findOption, groupLabel, groupOptions, groupValue, isAptSeq, paramStr, safeDecode } from "./params";
 
 describe("params", () => {
   it("paramStr: 문자열 하나만", () => {
@@ -32,6 +32,18 @@ describe("지역 선택지 · 단지 코드", () => {
     expect(isAptSeq("a b")).toBe(false);
     expect(isAptSeq("x".repeat(33))).toBe(false);
     expect(isAptSeq("11740,4692")).toBe(false);
+  });
+  it("findOption: 같은 value의 선택지, 배열·모르는 값·없음은 undefined", () => {
+    const opts = [{ value: "1", label: "하나" }, { value: "3", label: "셋" }];
+    expect(findOption(opts, "3")?.label).toBe("셋");
+    expect(findOption(opts, "2")).toBeUndefined();
+    expect(findOption(opts, ["3"])).toBeUndefined();
+    expect(findOption(opts, undefined)).toBeUndefined();
+  });
+  it("groupLabel: 그룹이 없으면 전체 지역", () => {
+    expect(groupLabel({ name: "영통" })).toBe("영통");
+    expect(groupLabel(null)).toBe("전체 지역");
+    expect(groupLabel(undefined)).toBe("전체 지역");
   });
   it("safeDecode: 잘못된 % 인코딩은 null", () => {
     expect(safeDecode("11740-4692")).toBe("11740-4692");

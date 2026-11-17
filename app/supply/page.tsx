@@ -1,13 +1,13 @@
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Legend, SupplyChart, type SupplyPoint } from "../_components/Charts";
 import { SupplyJeonse } from "../_components/SupplyJeonse";
-import { Badge, Card, Stat, toneText } from "../_components/ui";
+import { Badge, Card, EmptyRow, PageHeader, Stat, toneText } from "../_components/ui";
 import { DEFAULT_BAND } from "@/lib/area";
-import { deltaTone, formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
-import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
+import { deltaTone, formatCount, formatEok, formatHouseholds, formatPct, formatYm, shortYm } from "@/lib/format";
+import { findGroup, findOption, groupOptions, groupValue } from "@/lib/params";
 import { getGroups, getSupply, getTrend } from "@/lib/queries";
 import { groupColor } from "@/lib/groups";
-import { addMonths, currentYm, DATA_START, lastCompleteYm, maxYm, minYm, monthsBetween, partialIndex } from "@/lib/range";
+import { addMonths, byMonth, currentYm, DATA_START, lastCompleteYm, maxYm, minYm, monthsBetween, partialIndex } from "@/lib/range";
 import { REACTION_BEFORE, relocationByGroup, supplyByGroup, supplyReactions } from "@/lib/supply";
 
 const HISTORY_AHEAD = 24; // 입주·전세 칸: 보관 시작 ~ 향후 2년
@@ -21,11 +21,10 @@ const WINDOWS = [
 
 export default async function SupplyPage({ searchParams }: PageProps<"/supply">) {
   const sp = await searchParams;
-  const str = (k: string) => paramStr(sp[k]);
   const groups = await getGroups();
   const groupId = findGroup(groups, sp.g)?.id ?? null;
-  const win = WINDOWS.find((w) => w.value === str("w")) ?? WINDOWS[0];
-  const showExcluded = str("excluded") === "1";
+  const win = findOption(WINDOWS, sp.w) ?? WINDOWS[0];
+  const showExcluded = sp.excluded === "1";
 
   const now = currentYm();
   const from = addMonths(now, -win.past);
@@ -67,10 +66,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
   // 입주 전후 전세가
   const histMonths = monthsBetween(DATA_START, histTo);
   const supplyHist = supplyByGroup(regionToGroupId, histMonths, allProjects, allManual);
-  const jeonseHist = new Map(groups.map((g, i) => {
-    const byYm = new Map(jeonseRows[i].map((r) => [r.ym, r.jeonse_median]));
-    return [g.id, histMonths.map((m) => byYm.get(m) ?? null)] as const;
-  }));
+  const jeonseHist = new Map(groups.map((g, i) => [g.id, byMonth(histMonths, jeonseRows[i], (r) => r.jeonse_median)] as const));
   const histPartial = partialIndex(histMonths);
   const reactions = supplyReactions(histMonths, supplyHist, jeonseHist, histMonths.indexOf(lastCompleteYm()), REACTION_MIN)
     .filter((r) => groupId == null || r.groupId === groupId);
@@ -98,14 +94,13 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
       key: `m${m.id}`, ym: m.ym, name: m.name, url: null, regionId: m.region_id,
       households: m.households, muted: false, note: m.note, moveOut: m.kind === "이주", tags: ["직접 입력"],
     })),
-  ].sort((a, b) => a.ym.localeCompare(b.ym) || a.name.localeCompare(b.name));
+  ].sort((a, b) => a.ym.localeCompare(b.ym) || a.name.localeCompare(b.name, "ko")); // 이름 순은 서버 언어 설정과 관계없이 한국어 기준
 
   return (
     <FilterScope>
-      <h1 className="mb-1 text-2xl font-semibold">입주 물량</h1>
-      <p className="mb-4 text-sm text-ink-2">
+      <PageHeader title="입주 물량">
         청약홈 모집공고의 입주 예정월 기준. 세대수는 공급(분양)세대라 재건축·재개발은 조합원분이 빠져 실제보다 적습니다.
-      </p>
+      </PageHeader>
       <FilterBar>
         <ParamSelect label="기간" param="w" value={win.value} options={WINDOWS.map((w) => ({ value: w.value, label: w.label }))} />
         <ParamSelect label="지역" param="g" value={groupValue(groupId)} options={groupOptions(groups)} />
@@ -114,9 +109,9 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
 
       <Dimmed>
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="향후 12개월 입주" value={`${nextYear.toLocaleString()}세대`} />
-          <Stat label="그 다음 12개월" value={`${yearAfter.toLocaleString()}세대`} />
-          {moveOutNextYear > 0 && <Stat label="향후 12개월 이주" value={`${moveOutNextYear.toLocaleString()}세대`} sub="재건축·재개발 이주 (직접 입력)" />}
+          <Stat label="향후 12개월 입주" value={formatHouseholds(nextYear)} />
+          <Stat label="그 다음 12개월" value={formatHouseholds(yearAfter)} />
+          {moveOutNextYear > 0 && <Stat label="향후 12개월 이주" value={formatHouseholds(moveOutNextYear)} sub="재건축·재개발 이주 (직접 입력)" />}
         </div>
 
         <Card
@@ -160,7 +155,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                     <tr key={`${r.groupId}-${r.ym}`} className="border-t border-line text-right">
                       <td className="py-1.5 text-left">{shortYm(r.ym)}</td>
                       <td className="text-left font-sans">{groupName.get(r.groupId)}</td>
-                      <td>{r.households.toLocaleString()}</td>
+                      <td>{formatCount(r.households)}</td>
                       <td className="text-ink-2">{formatEok(r.before)}</td>
                       <td>{formatEok(r.around)}</td>
                       <td className={toneText[deltaTone(r.change)]}>{formatPct(r.change)}</td>
@@ -170,9 +165,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                       </td>
                     </tr>
                   ))}
-                  {reactions.length === 0 && (
-                    <tr><td colSpan={8} className="py-8 text-center text-muted">비교할 수 있는 대규모 입주(한 달 {REACTION_MIN}세대 이상)가 없습니다.</td></tr>
-                  )}
+                  {reactions.length === 0 && <EmptyRow cols={8} className="py-8">비교할 수 있는 대규모 입주(한 달 {REACTION_MIN}세대 이상)가 없습니다.</EmptyRow>}
                 </tbody>
               </table>
             </div>
@@ -200,7 +193,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                       {r.note && <span className="ml-1.5 text-xs text-muted">{r.note}</span>}
                     </td>
                     <td className="text-left font-sans text-ink-2">{groupName.get(regionToGroupId.get(r.regionId)!)}</td>
-                    <td>{r.households.toLocaleString()}</td>
+                    <td>{formatCount(r.households)}</td>
                     <td className="text-left">
                       <span className="inline-flex flex-wrap gap-1 pl-3">
                         {r.moveOut && <Badge tone="warn">이주</Badge>}
@@ -209,9 +202,7 @@ export default async function SupplyPage({ searchParams }: PageProps<"/supply">)
                     </td>
                   </tr>
                 ))}
-                {list.length === 0 && (
-                  <tr><td colSpan={5} className="py-12 text-center text-muted">이 기간에 입주 예정 공고가 없습니다.</td></tr>
-                )}
+                {list.length === 0 && <EmptyRow cols={5}>이 기간에 입주 예정 공고가 없습니다.</EmptyRow>}
               </tbody>
             </table>
           </div>

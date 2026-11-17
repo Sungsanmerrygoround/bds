@@ -1,5 +1,6 @@
+import { TableDetails } from "./ui";
 import { WeeklyChart, type WeeklySeries } from "./WeeklyChart";
-import { changePct } from "@/lib/chart";
+import { changePct, weeklyValues } from "@/lib/chart";
 import { signedPct } from "@/lib/format";
 import { getWeeklyIndex, type RegionGroup } from "@/lib/queries";
 import { monthEnd, monthStart } from "@/lib/range";
@@ -33,12 +34,8 @@ export async function WeeklyIndexPanel({ group, from, to }: { group: RegionGroup
   const start = allWeeks.findIndex((d) => d >= monthStart(from));
   const weeks = start < 0 ? [] : allWeeks.slice(start);
   const multi = group.regions.length > 1;
-  const valuesOf = (regionId: number, kind: string) => {
-    const m = new Map(rows.filter((r) => r.region_id === regionId && r.kind === kind).map((r) => [r.week_date, r.value]));
-    return allWeeks.map((d) => m.get(d) ?? null);
-  };
   const lines = KINDS.flatMap((k) => group.regions.map((r, j) => ({
-    kind: k, region: r, dashed: j > 0, full: valuesOf(r.id, k.kind),
+    kind: k, region: r, dashed: j > 0, full: weeklyValues(rows, r.id, k.kind, allWeeks),
   })));
   const last = allWeeks.length - 1;
   const lastWeek = allWeeks[last];
@@ -92,9 +89,7 @@ export async function WeeklyIndexPanel({ group, from, to }: { group: RegionGroup
         </table>
       </div>
 
-      <details className="panel px-4 py-3 text-sm">
-        <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">주간 지수 표로 보기 (최근 {TABLE_WEEKS}주)</summary>
-        <div className="overflow-x-auto">
+      <TableDetails summary={`주간 지수 표로 보기 (최근 ${TABLE_WEEKS}주)`}>
           <table className="mono mt-2 w-full min-w-[560px] text-right text-xs">
             <thead className="text-muted">
               <tr>
@@ -125,8 +120,7 @@ export async function WeeklyIndexPanel({ group, from, to }: { group: RegionGroup
               }).reverse()}
             </tbody>
           </table>
-        </div>
-      </details>
+      </TableDetails>
     </section>
   );
 }

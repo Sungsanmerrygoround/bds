@@ -4,6 +4,11 @@ import type { Args } from "./args";
 import { check, type Db } from "./db";
 import type { CallCounter } from "./http";
 
+/** GitHub Actions 실행 요약 화면에 오류를 주석으로 남긴다 (로컬 실행에서는 아무것도 하지 않음) */
+export function annotateError(msg: string): void {
+  if (process.env.GITHUB_ACTIONS) console.log(`::error::${msg.replace(/\r?\n/g, " ")}`);
+}
+
 export interface RunResult {
   fetched: number;
   upserted: number;

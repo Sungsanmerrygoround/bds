@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  addDays, addMonths, currentYm, daysBetween, kstDateOf, lastCompleteYm, maxYm, minYm, monthEnd, monthsAgo, monthsBetween, monthStart, partialFromYm,
+  addDays, addMonths, byMonth, currentYm, daysBetween, kstDateOf, lastCompleteYm, maxYm, minYm, monthEnd, monthsAgo, monthsBetween, monthStart, partialFromYm,
   partialIndex, rangeLabel, recentMonths, resolveRange, ymOfDate,
 } from "./range";
+
+describe("byMonth", () => {
+  it("행을 months 순서로 맞추고 없는 달은 null, months 밖 행은 버린다", () => {
+    const rows = [{ ym: "202603", v: 3 }, { ym: "202601", v: 1 }, { ym: "202512", v: 0 }];
+    expect(byMonth(["202601", "202602", "202603"], rows, (r) => r.v)).toEqual([1, null, 3]);
+    expect(byMonth([], rows, (r) => r.v)).toEqual([]);
+  });
+  it("pick이 null을 돌려주면 그대로 null (값 없는 달과 같게)", () => {
+    expect(byMonth(["202601"], [{ ym: "202601", v: null }], (r) => r.v)).toEqual([null]);
+  });
+});
 
 describe("kstDateOf · addDays · daysBetween", () => {
   it("ISO 시각의 KST 날짜 (UTC 15시부터 다음 날)", () => {

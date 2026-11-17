@@ -15,6 +15,7 @@ import { runKapt } from "./jobs/kapt";
 import { runRates } from "./jobs/rates";
 import { runSupply } from "./jobs/supply";
 import { runIndex } from "./jobs/weekly-index";
+import { annotateError } from "./runlog";
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -28,7 +29,6 @@ async function main() {
 
 main().catch((e) => {
   console.error(e);
-  // GitHub Actions: 실행 요약 화면에 오류 메시지를 주석으로 표시
-  if (process.env.GITHUB_ACTIONS) console.log(`::error::${String((e as Error).message ?? e).replace(/\r?\n/g, " ")}`);
+  annotateError(String((e as Error).message ?? e));
   process.exit(1);
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changePct, linearY, monotoneSlopes, niceTicks, rebase, runs, seriesPaths, spreadLabels, timeScale, toIndex, weekScale } from "./chart";
+import { changePct, linearY, monotoneSlopes, niceTicks, rebase, runs, seriesPaths, spreadLabels, timeScale, toIndex, weekScale, weeklyValues } from "./chart";
 import { monthsBetween } from "./range";
 
 describe("chart", () => {
@@ -133,5 +133,20 @@ describe("timeScale (월 단위 시간축)", () => {
     expect(s.xTicks).toEqual([{ i: 1, label: "1월" }]);
     expect(s.jans).toEqual([1]);
     expect(s.yearLabels).toEqual([{ i: 0, label: "2025" }, { i: 1, label: "2026" }]);
+  });
+});
+
+describe("weeklyValues", () => {
+  it("한 지역·한 종류의 값을 주 순서로, 없는 주는 null", () => {
+    const rows = [
+      { region_id: 1, kind: "sale", week_date: "2026-10-12", value: 101 },
+      { region_id: 1, kind: "jeonse", week_date: "2026-10-12", value: 90 },
+      { region_id: 2, kind: "sale", week_date: "2026-10-12", value: 50 },
+      { region_id: 1, kind: "sale", week_date: "2026-10-05", value: 100 },
+    ];
+    const weeks = ["2026-10-05", "2026-10-12", "2026-10-19"];
+    expect(weeklyValues(rows, 1, "sale", weeks)).toEqual([100, 101, null]);
+    expect(weeklyValues(rows, 1, "jeonse", weeks)).toEqual([null, 90, null]);
+    expect(weeklyValues(rows, 3, "sale", weeks)).toEqual([null, null, null]);
   });
 });

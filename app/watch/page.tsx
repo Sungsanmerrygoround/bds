@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FavButton } from "../_components/FavButton";
-import { Badge } from "../_components/ui";
+import { Badge, ComplexLink } from "../_components/ui";
 import { getFavorites } from "@/lib/favorites";
 import { formatCount, formatEok, formatHouseholds, formatPct, shortDate, shortYm } from "@/lib/format";
 import { getComplexInfo, getComplexStats, type ComplexStats } from "@/lib/queries";
@@ -26,8 +26,8 @@ function EventBadge({ s }: { s: ComplexStats }) {
   return (
     <span title={`${s.event_date} 거래`}>
       {s.event_type === "NEW_HIGH"
-        ? <Badge tone="up">▲ 신고가 {formatPct(Number(s.event_pct))}</Badge>
-        : <Badge tone="down">▼ 하락 {formatPct(Number(s.event_pct))}</Badge>}
+        ? <Badge tone="up">▲ 신고가 {formatPct(s.event_pct)}</Badge>
+        : <Badge tone="down">▼ 하락 {formatPct(s.event_pct)}</Badge>}
       <span className="ml-1 text-[11px] text-muted">{s.event_date && shortDate(s.event_date)}</span>
     </span>
   );
@@ -43,7 +43,7 @@ export default async function WatchPage() {
   const have = new Set(rows.map((r) => r.apt_seq));
   const missing = favs.filter((seq) => !have.has(seq));
   const compareHref = `/complex/compare?ids=${rows.slice(0, COMPARE_MAX).map((r) => encodeURIComponent(r.apt_seq)).join(",")}`;
-  const href = (s: ComplexStats) => `/complex/${encodeURIComponent(s.apt_seq)}${s.area_type ? `?area=${s.area_type}` : ""}`;
+  const href = (s: ComplexStats) => `/complex/${encodeURIComponent(s.apt_seq)}${s.area_type == null ? "" : `?area=${s.area_type}`}`;
 
   return (
     <>
@@ -129,13 +129,7 @@ export default async function WatchPage() {
                   return (
                     <tr key={s.apt_seq} className="border-t border-line text-right hover:bg-wash">
                       <td className="px-3 py-2 text-left font-sans">
-                        <span className="flex items-center gap-1">
-                          <FavButton aptSeq={s.apt_seq} on name={s.apt_nm} />
-                          <span>
-                            <Link href={href(s)} className="font-medium hover:underline">{s.apt_nm}</Link>
-                            <span className="ml-1.5 text-xs text-muted">{s.sigungu_name} {s.umd_nm} · {s.build_year ?? "-"}</span>
-                          </span>
-                        </span>
+                        <ComplexLink aptSeq={s.apt_seq} name={s.apt_nm} where={`${s.sigungu_name} ${s.umd_nm ?? ""} · ${s.build_year ?? "-"}`} area={s.area_type} fav />
                       </td>
                       <td className="px-2 text-ink-2">{formatCount(hhOf(s))}</td>
                       <td className="px-2">{s.area_type ?? "-"}㎡</td>

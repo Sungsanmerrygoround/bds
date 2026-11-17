@@ -3,16 +3,24 @@ import { notFound } from "next/navigation";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
 import { DealScatter, Legend, type DealDot } from "../../_components/Charts";
 import { FavButton } from "../../_components/FavButton";
+import { outlineLinkCls } from "../../_components/styles";
 import { Badge, Card, Stat } from "../../_components/ui";
 import { getFavorites } from "@/lib/favorites";
 import { complexFacts, formatEok, formatPct } from "@/lib/format";
-import { isAptSeq, safeDecode } from "@/lib/params";
+import { isAptSeq, paramStr, safeDecode } from "@/lib/params";
 import { getComplex, getComplexInfo, getComplexRents, getComplexTrades } from "@/lib/queries";
 import { currentYm, monthsAgo, rangeLabel, resolveRange, todayKst } from "@/lib/range";
 import { isNewContract, isUnregistered, jeonseRatio, median, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const TABLE_ROWS = 50;
 const ts = (date: string) => Date.parse(`${date}T00:00:00Z`);
+
+/** 전용면적 타입별 건수 */
+function countByArea(rows: { area_type: number }[]): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const r of rows) out.set(r.area_type, (out.get(r.area_type) ?? 0) + 1);
+  return out;
+}
 
 export default async function ComplexPage({ params, searchParams }: PageProps<"/complex/[aptSeq]">) {
   const { aptSeq: raw } = await params;
@@ -33,13 +41,10 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
   const info = infos.get(aptSeq);
 
   // 면적 타입: 기간 내 거래 수 많은 순. 기본값은 매매가 가장 많은 타입.
-  const counts = new Map<number, number>();
-  for (const r of [...trades, ...rents]) counts.set(r.area_type, (counts.get(r.area_type) ?? 0) + 1);
-  const tradeCounts = new Map<number, number>();
-  for (const r of trades) tradeCounts.set(r.area_type, (tradeCounts.get(r.area_type) ?? 0) + 1);
+  const counts = countByArea([...trades, ...rents]);
   const areas = [...counts.keys()].sort((a, b) => a - b);
-  const defaultArea = [...tradeCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? areas[0];
-  const areaParam = typeof sp.area === "string" ? sp.area : undefined;
+  const defaultArea = [...countByArea(trades).entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? areas[0];
+  const areaParam = paramStr(sp.area);
   const area = areaParam === "all" ? null : areas.find((a) => String(a) === areaParam) ?? defaultArea ?? null;
 
   const t = trades.filter((r) => area == null || r.area_type === area);
@@ -51,7 +56,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
     const ev = r.events.find((e) => !e.invalidated_at);
     return {
       t: ts(r.deal_date), price: r.price_man, kind: "매매", date: r.deal_date, floor: r.floor, direct: r.is_direct,
-      tag: ev ? `${ev.type === "NEW_HIGH" ? "신고가" : "하락"} ${formatPct(Number(ev.change_pct))}` : undefined,
+      tag: ev ? `${ev.type === "NEW_HIGH" ? "신고가" : "하락"} ${formatPct(ev.change_pct)}` : undefined,
     };
   });
   const jeonseDots: DealDot[] = jeonse.map((r) => ({
@@ -80,10 +85,7 @@ export default async function ComplexPage({ params, searchParams }: PageProps<"/
       <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1">
         <h1 className="text-xl font-semibold">{complex.apt_nm}</h1>
         <FavButton aptSeq={complex.apt_seq} on={favs.includes(complex.apt_seq)} name={complex.apt_nm} size="lg" />
-        <Link
-          href={`/complex/compare?ids=${encodeURIComponent(complex.apt_seq)}`}
-          className="ml-auto flex min-h-10 items-center rounded border border-line px-3 text-sm text-ink-2 hover:bg-wash"
-        >
+        <Link href={`/complex/compare?ids=${encodeURIComponent(complex.apt_seq)}`} className={`ml-auto ${outlineLinkCls}`}>
           다른 단지와 비교
         </Link>
       </div>

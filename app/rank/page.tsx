@@ -1,22 +1,16 @@
-import Link from "next/link";
 import { Dimmed, FilterScope, OptionList, RailLayout } from "../_components/Filters";
-import { FavButton } from "../_components/FavButton";
-import { toneText } from "../_components/ui";
+import { ComplexLink, EmptyRow, toneText } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { getFavorites } from "@/lib/favorites";
 import { deltaTone, formatCount, formatEok, formatPct, formatYm, shortYm } from "@/lib/format";
-import { findGroup, groupOptions, groupValue } from "@/lib/params";
-import { getGroups, getRank, type RankRow } from "@/lib/queries";
+import { findGroup, findOption, groupLabel, groupOptions, groupValue } from "@/lib/params";
+import { getGroups, getRank } from "@/lib/queries";
 import { addMonths, DATA_START, lastCompleteYm, ymOfDate } from "@/lib/range";
-import { jeonseRatio, pctChange } from "@/lib/stats";
+import { deriveRank, JEONSE_MIN, sortRanked, type RankSort } from "@/lib/rank";
 
-// 단지 순위: 집계가 끝난 최근 12개월 기준.
-// 1년 변동 = 최근 3개월 중위 ÷ 1년 전 같은 3개월 중위 (양쪽 2건 이상일 때만)
-// 최고가 대비 = 최근 3개월 중위(없으면 12개월 중위) ÷ 보관 기간(5년) 최고 거래가
-// 회전율 = 단지 전체(모든 면적) 12개월 매매 건수 ÷ 세대수(K-apt). 세대수가 단지 전체라 면적 필터와 관계없이 전체 거래로 계산한다.
-// 전세가율·갭 = 같은 면적 구간의 12개월 매매 중위와 12개월 전세 중위(갱신 제외) 비교. 전세가 JEONSE_MIN건 미만이면 내지 않는다.
+// 단지 순위: 집계가 끝난 최근 12개월 기준. 지표 정의는 lib/rank.ts
 
-const SORTS = [
+const SORTS: { value: RankSort; label: string; aside: string }[] = [
   { value: "ppa", label: "평당가", aside: "3.3㎡당" },
   { value: "chg", label: "1년 변동", aside: "3개월 중위" },
   { value: "vol", label: "거래량", aside: "12개월" },
@@ -24,7 +18,6 @@ const SORTS = [
   { value: "ratio", label: "전세가율", aside: "높은 순" },
   { value: "gap", label: "갭", aside: "작은 순" },
 ];
-const JEONSE_MIN = 2;
 const MINS = [
   { value: "1", label: "1건+" },
   { value: "3", label: "3건+" },
@@ -39,54 +32,23 @@ const HOUSEHOLDS = [
 ];
 const LIMIT = 100;
 
-interface Ranked extends RankRow {
-  chg: number | null;
-  peakRatio: number;
-  current: number;
-  turnover: number | null; // %
-  jeonse: number | null; // 12개월 전세 중위 (표본이 모자라면 null)
-  ratio: number | null; // 전세가율 %
-  gap: number | null; // 매매 중위 − 전세 중위 (만원)
-}
-
 export default async function RankPage({ searchParams }: PageProps<"/rank">) {
   const sp = await searchParams;
   const band = parseBand(sp.band);
-  const sort = SORTS.find((s) => s.value === sp.sort)?.value ?? "ppa";
-  const min = MINS.find((m) => m.value === sp.min)?.value ?? "3";
-  const hh = HOUSEHOLDS.find((h) => h.value === sp.hh)?.value ?? "all";
+  const sortOpt = findOption(SORTS, sp.sort) ?? SORTS[0];
+  const sort = sortOpt.value;
+  const min = findOption(MINS, sp.min)?.value ?? "3";
+  const hh = findOption(HOUSEHOLDS, sp.hh)?.value ?? "all";
   const [groups, favs] = await Promise.all([getGroups(), getFavorites()]);
   const group = findGroup(groups, sp.g) ?? null;
 
   const end = lastCompleteYm();
   const rows = await getRank(group?.id ?? null, band, end);
 
-  const ranked: Ranked[] = rows
-    .filter((r) => r.trades_12m >= Number(min) && (hh === "all" || (r.households ?? 0) >= Number(hh)))
-    .map((r) => {
-      const current = r.recent_count > 0 ? r.recent_median! : r.median_12m;
-      const jeonse = r.jeonse_count_12m >= JEONSE_MIN ? r.jeonse_median_12m : null;
-      return {
-        ...r,
-        current,
-        jeonse,
-        ratio: jeonseRatio(r.median_12m, jeonse),
-        gap: jeonse == null ? null : r.median_12m - jeonse,
-        chg: r.recent_count >= 2 && r.year_ago_count >= 2 ? pctChange(r.recent_median, r.year_ago_median) : null,
-        peakRatio: (current / r.peak_price) * 100,
-        turnover: r.households ? (r.trades_all_12m / r.households) * 100 : null,
-      };
-    });
-  const key: Record<string, (r: Ranked) => number | null> = {
-    ppa: (r) => r.ppa_12m,
-    chg: (r) => r.chg,
-    vol: (r) => r.trades_12m,
-    peak: (r) => -r.peakRatio,
-    ratio: (r) => r.ratio,
-    gap: (r) => (r.gap == null ? null : -r.gap),
-  };
-  const k = key[sort];
-  ranked.sort((a, b) => (k(b) ?? -Infinity) - (k(a) ?? -Infinity) || b.trades_12m - a.trades_12m);
+  const ranked = sortRanked(
+    rows.filter((r) => r.trades_12m >= Number(min) && (hh === "all" || (r.households ?? 0) >= Number(hh))).map(deriveRank),
+    sort,
+  );
   const shown = ranked.slice(0, LIMIT);
   const favSet = new Set(favs);
   const period = `${shortYm(addMonths(end, -11))}–${shortYm(end)}`;
@@ -95,7 +57,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
     <FilterScope>
       <h1 className="sr-only">단지 순위</h1>
       <RailLayout
-        summary={[group?.name ?? "전체 지역", bandText(band), SORTS.find((s) => s.value === sort)!.label, ...(hh === "all" ? [] : [`${hh}세대+`])]}
+        summary={[groupLabel(group), bandText(band), sortOpt.label, ...(hh === "all" ? [] : [`${hh}세대+`])]}
         rail={
           <>
             <OptionList label="지역" param="g" value={groupValue(group?.id)} cols={2} options={groupOptions(groups)} />
@@ -108,7 +70,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
       >
         <Dimmed className="flex flex-col gap-3">
           <p className="text-sm text-ink-2">
-            {group?.name ?? "전체 지역"} · {bandText(band)} · <span className="mono">{period}</span> 매매 기준 {ranked.length}개 단지
+            {groupLabel(group)} · {bandText(band)} · <span className="mono">{period}</span> 매매 기준 {ranked.length}개 단지
             {ranked.length > LIMIT && ` 중 상위 ${LIMIT}개`}
             <span className="text-muted"> · 1년 변동은 최근 3개월과 1년 전 같은 3개월 중위가 비교(양쪽 2건 이상) · 최고가는 {formatYm(DATA_START)} 이후
               · 세대수는 K-apt(의무관리 단지만) · 회전율은 단지 전체 면적 12개월 매매 ÷ 세대수{hh !== "all" && " · 세대수 필터는 세대수를 아는 단지만"}
@@ -139,13 +101,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                   <tr key={r.apt_seq} className="border-t border-line text-right hover:bg-wash">
                     <td className="px-2 py-2 text-left text-muted">{i + 1}</td>
                     <td className="text-left font-sans">
-                      <span className="flex items-center gap-1">
-                        <FavButton aptSeq={r.apt_seq} on={favSet.has(r.apt_seq)} name={r.apt_nm} />
-                        <span className="min-w-0">
-                          <Link href={`/complex/${encodeURIComponent(r.apt_seq)}`} className="font-medium hover:underline">{r.apt_nm}</Link>
-                          <span className="ml-1.5 text-xs text-muted">{r.sigungu_name} {r.umd_nm}</span>
-                        </span>
-                      </span>
+                      <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} where={`${r.sigungu_name} ${r.umd_nm ?? ""}`} fav={favSet.has(r.apt_seq)} />
                     </td>
                     <td className="px-2 text-ink-2">{r.build_year ?? "-"}</td>
                     <td className="px-2 text-ink-2">{formatCount(r.households)}</td>
@@ -168,7 +124,7 @@ export default async function RankPage({ searchParams }: PageProps<"/rank">) {
                     </td>
                   </tr>
                 ))}
-                {shown.length === 0 && <tr><td colSpan={13} className="py-12 text-center text-muted">조건에 맞는 단지가 없습니다.</td></tr>}
+                {shown.length === 0 && <EmptyRow cols={13}>조건에 맞는 단지가 없습니다.</EmptyRow>}
               </tbody>
             </table>
           </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CompareCharts, type CompareSeries } from "../../_components/CompareCharts";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
+import { inputCls } from "../../_components/styles";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { getFavorites } from "@/lib/favorites";
 import { formatCount, formatEok, formatYm } from "@/lib/format";
@@ -94,7 +95,7 @@ export default async function ComplexComparePage({ searchParams }: PageProps<"/c
           <form action="/complex/compare" className="flex flex-wrap items-center gap-2">
             {Object.entries(sp).map(([k, v]) => (typeof v === "string" && k !== "q" ? <input key={k} type="hidden" name={k} value={k === "ids" ? valid.join(",") : v} /> : null))}
             <input name="q" defaultValue={q} placeholder="단지명으로 추가 (예: 고덕아르테온)" aria-label="추가할 단지 검색"
-              className="min-h-10 w-64 max-w-full rounded border border-line bg-surface-2 px-2.5 text-sm text-ink" />
+              className={`${inputCls} w-64 max-w-full`} />
             <button className="min-h-10 rounded border border-line px-3 text-sm hover:bg-wash">검색</button>
           </form>
         )}

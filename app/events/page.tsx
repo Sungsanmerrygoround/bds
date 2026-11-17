@@ -1,8 +1,9 @@
 import { EventTabs } from "../_components/EventTabs";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
-import { Badge, ComplexLink } from "../_components/ui";
+import { Badge, ComplexLink, EmptyRow, PageHeader } from "../_components/ui";
+import { SAMPLE_OPTIONS } from "./options";
 import { formatEok, formatPct } from "@/lib/format";
-import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
+import { findGroup, findOption, groupOptions, groupValue } from "@/lib/params";
 import { EVENT_LIMIT, getEvents, getGroups, type EventRow } from "@/lib/queries";
 import { monthsAgo, todayKst } from "@/lib/range";
 import { isUnregistered, UNREGISTERED_DAYS } from "@/lib/stats";
@@ -13,26 +14,24 @@ const PERIODS = [
   { value: "6", label: "최근 6개월" },
   { value: "12", label: "최근 1년" },
 ];
-const SAMPLES = [
-  { value: "1", label: "1건 이상" },
-  { value: "3", label: "3건 이상" },
-  { value: "10", label: "10건 이상" },
+const TYPES: { value: "all" | EventRow["type"]; label: string }[] = [
+  { value: "all", label: "전체" },
+  { value: "NEW_HIGH", label: "신고가" },
+  { value: "DROP", label: "하락" },
 ];
 
 export default async function EventsPage({ searchParams }: PageProps<"/events">) {
   const sp = await searchParams;
-  const str = (k: string) => paramStr(sp[k]);
-
   const groups = await getGroups();
   const groupId = findGroup(groups, sp.g)?.id ?? null;
-  const type = str("type") === "NEW_HIGH" || str("type") === "DROP" ? (str("type") as "NEW_HIGH" | "DROP") : null;
-  const months = PERIODS.find((p) => p.value === str("m"))?.value ?? "3";
-  const minSamples = SAMPLES.find((s) => s.value === str("n"))?.value ?? "1";
-  const excludeDirect = str("nodirect") === "1";
-  const includeInvalid = str("invalid") === "1";
+  const typeValue = findOption(TYPES, sp.type)?.value ?? "all";
+  const months = findOption(PERIODS, sp.m)?.value ?? "3";
+  const minSamples = findOption(SAMPLE_OPTIONS, sp.n)?.value ?? "1";
+  const excludeDirect = sp.nodirect === "1";
+  const includeInvalid = sp.invalid === "1";
 
   const events = await getEvents({
-    type, groupId, minSamples: Number(minSamples), includeDirect: !excludeDirect, includeInvalid,
+    type: typeValue === "all" ? null : typeValue, groupId, minSamples: Number(minSamples), includeDirect: !excludeDirect, includeInvalid,
     since: monthsAgo(Number(months)),
   });
   const highs = events.filter((e) => e.type === "NEW_HIGH").length;
@@ -42,16 +41,15 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
 
   return (
     <FilterScope>
-      <h1 className="mb-1 text-2xl font-semibold">신고가·하락 거래</h1>
-      <p className="mb-3 text-sm text-ink-2">
+      <PageHeader title="신고가·하락 거래" gap="mb-3">
         같은 단지·같은 전용면적(소수 첫째 자리) 기준. 신고가 = 계약일 직전 36개월 최고가 초과, 하락 = 직전 6개월 중위가 대비 -10% 이하.
-      </p>
+      </PageHeader>
       <EventTabs active="/events" />
       <FilterBar>
         <ParamSelect label="계약일" param="m" value={months} options={PERIODS} />
-        <ParamSelect label="유형" param="type" value={type ?? "all"} options={[{ value: "all", label: "전체" }, { value: "NEW_HIGH", label: "신고가" }, { value: "DROP", label: "하락" }]} />
+        <ParamSelect label="유형" param="type" value={typeValue} options={TYPES} />
         <ParamSelect label="지역" param="g" value={groupValue(groupId)} options={groupOptions(groups)} />
-        <ParamSelect label="비교 거래 수" param="n" value={minSamples} options={SAMPLES} />
+        <ParamSelect label="비교 거래 수" param="n" value={minSamples} options={SAMPLE_OPTIONS} />
         <ParamToggle label="직거래 제외" param="nodirect" checked={excludeDirect} />
         <ParamToggle label="해제·정정된 거래 포함" param="invalid" checked={includeInvalid} />
       </FilterBar>
@@ -99,13 +97,11 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
                     {formatEok(e.ref_price_man)}
                     <span className="ml-1 text-xs text-muted">{e.type === "NEW_HIGH" ? "최고" : "중위"}</span>
                   </td>
-                  <td className={`px-3 ${e.type === "NEW_HIGH" ? "text-up" : "text-down"}`}>{formatPct(Number(e.change_pct))}</td>
+                  <td className={`px-3 ${e.type === "NEW_HIGH" ? "text-up" : "text-down"}`}>{formatPct(e.change_pct)}</td>
                   <td className="px-3 text-ink-2">{e.ref_sample_count}건</td>
                 </tr>
               ))}
-              {events.length === 0 && (
-                <tr><td colSpan={9} className="py-12 text-center text-muted">조건에 맞는 거래가 없습니다.</td></tr>
-              )}
+              {events.length === 0 && <EmptyRow cols={9}>조건에 맞는 거래가 없습니다.</EmptyRow>}
             </tbody>
           </table>
         </div>

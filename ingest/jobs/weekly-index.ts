@@ -1,7 +1,6 @@
 // 한국부동산원 주간 매매·전세 지수 수집 (시군구)
 import type { Args } from "../args";
 import { check, serviceClient } from "../db";
-import type { CallCounter } from "../http";
 import { fetchIndex, INDEX_START_WEEK, INDEX_TABLES } from "../reb";
 import { recordRun } from "../runlog";
 
@@ -13,7 +12,7 @@ export async function runIndex(args: Args) {
   ) as { id: number; sigungu_name: string; lawd_cd: string; reb_cls_id: number }[];
   const targets = regions.filter((r) => !args.lawd || args.lawd.includes(r.lawd_cd));
 
-  const work = async (counter: CallCounter) => {
+  await recordRun(db, args, "index", async (counter) => {
     let fetched = 0;
     for (const r of targets) {
       for (const t of INDEX_TABLES) {
@@ -31,6 +30,5 @@ export async function runIndex(args: Args) {
     }
     console.log(`API 호출 ${counter.calls}회`);
     return { fetched, upserted: args.dry ? 0 : fetched };
-  };
-  await recordRun(db, args, "index", work);
+  });
 }

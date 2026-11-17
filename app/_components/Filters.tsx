@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { shortYm } from "@/lib/format";
 import { RANGE_PRESETS } from "@/lib/range";
+import { inputCls } from "./styles";
 
 // 필터는 URL 검색 파라미터로 상태를 들고, 바뀌면 서버 컴포넌트가 다시 렌더된다.
 // 다시 불러오는 동안 기존 화면은 흐리게 유지(레이아웃 점프 없음).
@@ -330,5 +331,3 @@ export function ParamToggle({ label, param, checked }: { label: string; param: s
     </label>
   );
 }
-
-const inputCls = "min-h-10 rounded border border-line bg-surface-2 px-2.5 text-sm text-ink";

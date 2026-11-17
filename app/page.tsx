@@ -3,7 +3,7 @@ import { PeakTable } from "./_components/PeakTable";
 import { RateChart } from "./_components/RateChart";
 import { WeeklyIndexPanel } from "./_components/WeeklyIndexPanel";
 import { TrendTerminal, type TermPoint } from "./_components/TrendTerminal";
-import { Spark, SparkBars, Stat, toneText } from "./_components/ui";
+import { MonthLabel, Spark, SparkBars, Stat, TableDetails, toneText } from "./_components/ui";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { deltaTone, formatDelta, formatEok, formatYm, shortYm } from "@/lib/format";
 import { findGroup } from "@/lib/params";
@@ -156,9 +156,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
           <WeeklyIndexPanel group={group} from={range.from} to={range.to} />
           <RateChart months={chart.map((d) => d.ym)} />
 
-          <details className="panel px-4 py-3 text-sm">
-            <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">표로 보기</summary>
-            <div className="overflow-x-auto">
+          <TableDetails>
               <table className="mono mt-2 w-full min-w-[480px] text-right text-xs">
                 <thead className="text-muted">
                   <tr>
@@ -173,7 +171,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
                 <tbody>
                   {[...chart].reverse().map((d) => (
                     <tr key={d.ym} className="border-t border-line">
-                      <td className="py-1.5 text-left">{formatYm(d.ym)}{d.partial && <span className="ml-1.5 text-s2">집계 중</span>}</td>
+                      <td className="py-1.5 text-left"><MonthLabel ym={d.ym} partial={d.partial} /></td>
                       <td>{formatEok(d.trade)}</td>
                       <td>{d.tradeCount}</td>
                       <td>{formatEok(d.jeonse)}</td>
@@ -183,8 +181,7 @@ export default async function TrendPage({ searchParams }: PageProps<"/">) {
                   ))}
                 </tbody>
               </table>
-            </div>
-          </details>
+          </TableDetails>
         </Dimmed>
       </RailLayout>
     </FilterScope>

@@ -1,13 +1,14 @@
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { CompareCharts, type CompareSeries } from "../_components/CompareCharts";
 import { PeakTable } from "../_components/PeakTable";
+import { MonthLabel, TableDetails } from "../_components/ui";
 import { WeeklyChart, type WeeklySeries } from "../_components/WeeklyChart";
 import { AREA_BAND_LABEL, BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
 import { formatEok, formatYm, shortYm } from "@/lib/format";
 import { groupColor } from "@/lib/groups";
-import { rebase } from "@/lib/chart";
+import { rebase, weeklyValues } from "@/lib/chart";
 import { getGroups, getTrend, getWeeklyIndex } from "@/lib/queries";
-import { currentYm, DATA_START, lastCompleteYm, minYm, monthEnd, monthsBetween, monthStart, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
+import { byMonth, currentYm, DATA_START, lastCompleteYm, minYm, monthEnd, monthsBetween, monthStart, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 import { peakRecovery } from "@/lib/stats";
 
 export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
@@ -22,39 +23,33 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
   const trends = await Promise.all(groups.map((g) => getTrend(g.id, band, histFrom, range.to)));
   const histMonths = monthsBetween(histFrom, range.to);
   const lastDone = lastCompleteYm();
-  const peaks = groups.map((g, i) => {
-    const byYm = new Map(trends[i].map((r) => [r.ym, r.trade_median]));
-    return { key: String(g.id), label: g.name, color: groupColor(i), peak: peakRecovery(histMonths, histMonths.map((m) => byYm.get(m) ?? null), lastDone) };
-  });
+  const peaks = groups.map((g, i) => ({
+    key: String(g.id), label: g.name, color: groupColor(i),
+    peak: peakRecovery(histMonths, byMonth(histMonths, trends[i], (r) => r.trade_median), lastDone),
+  }));
 
   const months = monthsBetween(range.from, range.to);
   const partialFrom = partialIndex(months);
 
-  const series: CompareSeries[] = groups.map((g, i) => {
-    const byYm = new Map(trends[i].map((r) => [r.ym, r]));
-    return {
-      id: g.id,
-      name: g.name,
-      color: groupColor(i),
-      price: months.map((m) => byYm.get(m)?.trade_median ?? null),
-      count: months.map((m) => byYm.get(m)?.trade_count ?? 0),
-    };
-  });
+  const series: CompareSeries[] = groups.map((g, i) => ({
+    id: g.id,
+    name: g.name,
+    color: groupColor(i),
+    price: byMonth(months, trends[i], (r) => r.trade_median),
+    count: byMonth(months, trends[i], (r) => r.trade_count).map((n) => n ?? 0),
+  }));
   const hasData = series.some((s) => s.price.some((v) => v != null));
 
   // 부동산원 주간 매매지수: 구마다 한 선, 기간 첫 주 = 100 (구성남은 같은 색 실선·점선)
   const weekRows = await getWeeklyIndex(groups.flatMap((g) => g.regions.map((r) => r.id)), ["sale"], monthStart(range.from), monthEnd(range.to));
   const weeks = [...new Set(weekRows.map((r) => r.week_date))].sort();
-  const weekly: WeeklySeries[] = groups.flatMap((g, i) => g.regions.map((r, j) => {
-    const m = new Map(weekRows.filter((x) => x.region_id === r.id).map((x) => [x.week_date, x.value]));
-    return {
-      key: String(r.id),
-      label: g.regions.length > 1 ? `${g.name} ${r.sigungu_name.split(" ").at(-1)}` : g.name,
-      color: groupColor(i),
-      dashed: j > 0,
-      values: rebase(weeks.map((d) => m.get(d) ?? null)),
-    };
-  }));
+  const weekly: WeeklySeries[] = groups.flatMap((g, i) => g.regions.map((r, j) => ({
+    key: String(r.id),
+    label: g.regions.length > 1 ? `${g.name} ${r.sigungu_name.split(" ").at(-1)}` : g.name,
+    color: groupColor(i),
+    dashed: j > 0,
+    values: rebase(weeklyValues(weekRows, r.id, "sale", weeks)),
+  })));
 
   return (
     <FilterScope>
@@ -103,9 +98,7 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
               note={`${shortYm(DATA_START)} 이후 월별 중위가의 3개월 이동평균 기준`} />
           )}
 
-          <details className="panel px-4 py-3 text-sm">
-            <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">표로 보기</summary>
-            <div className="overflow-x-auto">
+          <TableDetails>
               <table className="mono mt-2 w-full min-w-[720px] text-right text-xs">
                 <thead className="text-muted">
                   <tr>
@@ -122,18 +115,14 @@ export default async function ComparePage({ searchParams }: PageProps<"/compare"
                 <tbody>
                   {months.map((m, i) => ({ m, i })).reverse().map(({ m, i }) => (
                     <tr key={m} className="border-t border-line">
-                      <td className="py-1.5 text-left">
-                        {formatYm(m)}
-                        {i >= partialFrom && <span className="ml-1.5 text-s2">집계 중</span>}
-                      </td>
+                      <td className="py-1.5 text-left"><MonthLabel ym={m} partial={i >= partialFrom} /></td>
                       {series.map((s) => <td key={`p${s.id}`}>{formatEok(s.price[i])}</td>)}
                       {series.map((s) => <td key={`c${s.id}`}>{s.count[i]}</td>)}
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          </details>
+          </TableDetails>
         </Dimmed>
       </RailLayout>
     </FilterScope>

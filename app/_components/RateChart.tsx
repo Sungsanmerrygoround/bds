@@ -1,13 +1,13 @@
 import { MetricChart } from "./MetricChart";
 import { getRates, type RateRow } from "@/lib/queries";
+import { byMonth } from "@/lib/range";
 
 // 금리 차트 (한국은행 ECOS, 전국·월별). 추이·전세 갱신 화면에서 같은 기간으로 쓴다.
 // 기준금리와 주담대 금리는 같은 단위(연 %)라 한 차트에 둔다.
 
 /** 한 금리 계열의 월별 값 (months와 같은 길이, 없는 달은 null) */
 export function rateValues(rows: RateRow[], series: RateRow["series"], months: string[]): (number | null)[] {
-  const byYm = new Map(rows.filter((r) => r.series === series).map((r) => [r.ym, r.value]));
-  return months.map((m) => byYm.get(m) ?? null);
+  return byMonth(months, rows.filter((r) => r.series === series), (r) => r.value);
 }
 
 export async function RateChart({ months }: { months: string[] }) {

@@ -5,10 +5,18 @@ type Param = string | string[] | undefined;
 /** 값이 문자열 하나일 때만 그 값 */
 export const paramStr = (v: Param): string | undefined => (typeof v === "string" ? v : undefined);
 
+/** 선택지 중 URL 값과 같은 것 (없거나 모르는 값이면 undefined → 호출하는 쪽이 기본값을 고른다) */
+export function findOption<O extends { value: string }>(options: readonly O[], v: Param): O | undefined {
+  return options.find((o) => o.value === v);
+}
+
 /** ?g=<그룹 id> → 그룹 (없거나 모르는 값이면 undefined) */
 export function findGroup<G extends { id: number }>(groups: G[], v: Param): G | undefined {
   return groups.find((g) => String(g.id) === v);
 }
+
+/** 고른 지역 그룹 이름, 고르지 않았으면 '전체 지역' */
+export const groupLabel = (g: { name: string } | null | undefined) => g?.name ?? "전체 지역";
 
 /** 지역 필터 선택지: 전체 + 그룹들 */
 export const groupOptions = (groups: { id: number; name: string }[]) => [

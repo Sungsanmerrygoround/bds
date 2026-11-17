@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
-import { FavButton } from "../_components/FavButton";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
-import { Badge, ComplexLink, Stat, toneText } from "../_components/ui";
+import { Badge, ComplexLink, EmptyRow, PageHeader, Stat, toneText } from "../_components/ui";
 import { getFavorites } from "@/lib/favorites";
 import { deltaTone, formatEok, formatPct, shortDate } from "@/lib/format";
-import { findGroup, groupOptions, groupValue, paramStr } from "@/lib/params";
+import { findGroup, findOption, groupOptions, groupValue } from "@/lib/params";
 import { getGroups, getNewRents, getNewTrades, NEW_DEAL_LIMIT, type NewRent, type NewTrade } from "@/lib/queries";
 import { addDays, daysBetween, kstDateOf, todayKst } from "@/lib/range";
 import { isNewContract, median, pctChange } from "@/lib/stats";
@@ -46,12 +45,7 @@ function byDay<T extends { first_seen_at: string }>(rows: T[]): { day: string; r
 function ComplexCell({ r, fav }: { r: { apt_seq: string; apt_nm: string; umd_nm: string | null; sigungu_name: string; area_type: number }; fav: boolean }) {
   return (
     <td className="px-3 text-left font-sans">
-      <span className="flex items-center gap-1">
-        <FavButton aptSeq={r.apt_seq} on={fav} name={r.apt_nm} />
-        <span className="min-w-0">
-          <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} where={`${r.sigungu_name} ${r.umd_nm ?? ""}`} area={r.area_type} />
-        </span>
-      </span>
+      <ComplexLink aptSeq={r.apt_seq} name={r.apt_nm} where={`${r.sigungu_name} ${r.umd_nm ?? ""}`} area={r.area_type} fav={fav} />
     </td>
   );
 }
@@ -76,12 +70,11 @@ function DayRows<T extends { id: number; first_seen_at: string }>({ groups, cols
 
 export default async function NewDealsPage({ searchParams }: PageProps<"/new">) {
   const sp = await searchParams;
-  const str = (k: string) => paramStr(sp[k]);
   const [groups, favs] = await Promise.all([getGroups(), getFavorites()]);
   const groupId = findGroup(groups, sp.g)?.id ?? null;
-  const days = PERIODS.find((p) => p.value === str("d"))?.value ?? "3";
-  const kind = str("kind") === "rent" ? "rent" : "trade";
-  const favOnly = str("fav") === "1";
+  const days = findOption(PERIODS, sp.d)?.value ?? "3";
+  const kind = sp.kind === "rent" ? "rent" : "trade";
+  const favOnly = sp.fav === "1";
   const favSet = new Set(favs);
   // 관심 단지만: DB에서 그 단지들로 좁힌다 (전체에서 최근 N건을 받아 거르면 건수 제한에 잘린다). 관심 단지가 없으면 조회하지 않는다.
   const only = favOnly ? favs : undefined;
@@ -115,11 +108,10 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
 
   return (
     <FilterScope>
-      <h1 className="mb-1 text-2xl font-semibold">새로 신고된 거래</h1>
-      <p className="mb-4 text-sm text-ink-2">
+      <PageHeader title="새로 신고된 거래">
         계약일이 아니라 수집에서 처음 잡힌 날 기준입니다. 매일 아침 수집하므로 수집일은 대체로 신고 다음 날입니다.
         <span className="text-muted"> 월요일에는 3~8개월 전 계약을 다시 받으면서 늦게 신고된 옛 거래도 함께 들어옵니다.</span>
-      </p>
+      </PageHeader>
       <FilterBar>
         <ParamSelect label="종류" param="kind" value={kind} options={KINDS} />
         <ParamSelect label="수집일" param="d" value={days} options={PERIODS} />
@@ -194,7 +186,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
                     );
                   }}
                 </DayRows>
-                {trades.length === 0 && <tr><td colSpan={8} className="py-12 text-center font-sans text-muted">{empty}</td></tr>}
+                {trades.length === 0 && <EmptyRow cols={8} className="py-12 font-sans">{empty}</EmptyRow>}
               </tbody>
             </table>
           ) : (
@@ -240,7 +232,7 @@ export default async function NewDealsPage({ searchParams }: PageProps<"/new">) 
                     );
                   }}
                 </DayRows>
-                {rents.length === 0 && <tr><td colSpan={8} className="py-12 text-center font-sans text-muted">{empty}</td></tr>}
+                {rents.length === 0 && <EmptyRow cols={8} className="py-12 font-sans">{empty}</EmptyRow>}
               </tbody>
             </table>
           )}

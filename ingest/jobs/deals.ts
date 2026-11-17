@@ -1,13 +1,46 @@
 // 실거래(매매·전월세) 수집: backfill · daily · refresh, 그리고 DB 없이 결과만 보는 --dry
 import { randomUUID } from "node:crypto";
+import { formatEok } from "../../lib/format";
 import { monthsBetween, recentMonths } from "../../lib/range";
 import type { Args } from "../args";
-import { formatEok } from "../../lib/format";
 import { check, getSettingNum, loadRegions, serviceClient, type Db } from "../db";
 import { FatalApiError, type CallCounter } from "../http";
-import { fetchMonth } from "../molit";
-import { normalizeRents, normalizeTrades, type Region } from "../normalize";
+import { fetchMonth, type Kind, type RawItem } from "../molit";
+import { normalizeRents, normalizeTrades, type Normalized, type Region, type RentRow, type TradeRow } from "../normalize";
+import { annotateError } from "../runlog";
 import { storeMonth, upsertComplexes } from "../store";
+
+/** 종류에 맞는 정규화 */
+const normalize = (kind: Kind, items: RawItem[], regions: Region[], lawd: string, ym: string) =>
+  kind === "trade" ? normalizeTrades(items, regions, lawd, ym) : normalizeRents(items, regions, lawd, ym);
+
+// ---------- --dry 출력 ----------
+
+function printSummary(kind: Kind, lawd: string, ym: string, fetched: number, n: Normalized<unknown>) {
+  console.log(`\n[${kind}] ${lawd} ${ym}: API ${fetched}건 → 저장 대상 ${n.rows.length}건, 55㎡ 미만 제외 ${n.skipped.small_area}건, 단지 ${n.complexes.length}개`);
+}
+
+const nameOf = (n: Normalized<unknown>, aptSeq: string) => n.complexes.find((c) => c.apt_seq === aptSeq)?.apt_nm;
+
+function printTrades(n: Normalized<TradeRow>) {
+  const t = n.rows;
+  const cancelled = t.filter((r) => r.is_cancelled).length;
+  const direct = t.filter((r) => r.dealing_type === "직거래").length;
+  const dupes = t.filter((r) => !r.trade_key.endsWith("#1")).length;
+  console.log(`  해제 ${cancelled}건 / 직거래 ${direct}건 / 동일 키 중복(#2 이상) ${dupes}건`);
+  for (const r of t.slice(0, 5)) {
+    console.log(`  ${r.deal_date} ${nameOf(n, r.apt_seq)} ${r.exclu_area}㎡ ${r.floor}층 ${formatEok(r.price_man)} ${r.dealing_type ?? ""}${r.is_cancelled ? " [해제 " + r.cancel_date + "]" : ""}  key=${r.trade_key}`);
+  }
+}
+
+function printRents(n: Normalized<RentRow>) {
+  const t = n.rows;
+  const jeonse = t.filter((r) => r.monthly_rent_man === 0).length;
+  console.log(`  전세 ${jeonse}건 / 월세 ${t.length - jeonse}건`);
+  for (const r of t.slice(0, 5)) {
+    console.log(`  ${r.deal_date} ${nameOf(n, r.apt_seq)} ${r.exclu_area}㎡ ${r.floor}층 보증금 ${formatEok(r.deposit_man)} 월 ${r.monthly_rent_man}만 ${r.contract_type ?? ""}`);
+  }
+}
 
 /** 주간 재수집 범위: N~M개월 전 계약월 (daily가 다시 받는 최근 달은 뺀다) */
 async function refreshMonths(db: Db): Promise<string[]> {
@@ -26,26 +59,14 @@ export async function runDry(args: Args) {
     for (const ym of months) {
       for (const kind of args.kinds) {
         const items = await fetchMonth(kind, lawd, ym, counter);
-        const n = kind === "trade" ? normalizeTrades(items, regions, lawd, ym) : normalizeRents(items, regions, lawd, ym);
-        console.log(`\n[${kind}] ${lawd} ${ym}: API ${items.length}건 → 저장 대상 ${n.rows.length}건, 55㎡ 미만 제외 ${n.skipped.small_area}건, 단지 ${n.complexes.length}개`);
         if (kind === "trade") {
-          const t = n.rows as ReturnType<typeof normalizeTrades>["rows"];
-          const cancelled = t.filter((r) => r.is_cancelled).length;
-          const direct = t.filter((r) => r.dealing_type === "직거래").length;
-          const dupes = t.filter((r) => !r.trade_key.endsWith("#1")).length;
-          console.log(`  해제 ${cancelled}건 / 직거래 ${direct}건 / 동일 키 중복(#2 이상) ${dupes}건`);
-          for (const r of t.slice(0, 5)) {
-            const name = n.complexes.find((c) => c.apt_seq === r.apt_seq)?.apt_nm;
-            console.log(`  ${r.deal_date} ${name} ${r.exclu_area}㎡ ${r.floor}층 ${formatEok(r.price_man)} ${r.dealing_type ?? ""}${r.is_cancelled ? " [해제 " + r.cancel_date + "]" : ""}  key=${r.trade_key}`);
-          }
+          const n = normalizeTrades(items, regions, lawd, ym);
+          printSummary(kind, lawd, ym, items.length, n);
+          printTrades(n);
         } else {
-          const t = n.rows as ReturnType<typeof normalizeRents>["rows"];
-          const jeonse = t.filter((r) => r.monthly_rent_man === 0).length;
-          console.log(`  전세 ${jeonse}건 / 월세 ${t.length - jeonse}건`);
-          for (const r of t.slice(0, 5)) {
-            const name = n.complexes.find((c) => c.apt_seq === r.apt_seq)?.apt_nm;
-            console.log(`  ${r.deal_date} ${name} ${r.exclu_area}㎡ ${r.floor}층 보증금 ${formatEok(r.deposit_man)} 월 ${r.monthly_rent_man}만 ${r.contract_type ?? ""}`);
-          }
+          const n = normalizeRents(items, regions, lawd, ym);
+          printSummary(kind, lawd, ym, items.length, n);
+          printRents(n);
         }
       }
     }
@@ -83,7 +104,7 @@ export async function runDeals(args: Args) {
         const callsBefore = counter.calls;
         try {
           const items = await fetchMonth(kind, lawd, ym, counter);
-          const n = kind === "trade" ? normalizeTrades(items, regions, lawd, ym) : normalizeRents(items, regions, lawd, ym);
+          const n = normalize(kind, items, regions, lawd, ym);
           await upsertComplexes(db, n.complexes, kind);
           const r = await storeMonth(db, kind, lawd, ym, n.rows);
           if (kind === "trade") changedTradeIds.push(...r.changedIds);
@@ -99,7 +120,7 @@ export async function runDeals(args: Args) {
           errors++;
           const msg = (e as Error).message;
           console.error(`  ✗ ${kind} ${lawd} ${ym}: ${msg}`);
-          if (process.env.GITHUB_ACTIONS) console.log(`::error::${kind} ${lawd} ${ym}: ${msg.replace(/\r?\n/g, " ")}`);
+          annotateError(`${kind} ${lawd} ${ym}: ${msg}`);
           await db.from("ingest_runs").update({
             status: "error", finished_at: new Date().toISOString(),
             api_calls: counter.calls - callsBefore, error: msg,

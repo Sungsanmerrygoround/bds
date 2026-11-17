@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { barPath, linearY, niceTicks, seriesPaths, timeScale } from "@/lib/chart";
-import { formatEok, longYm, shortYm } from "@/lib/format";
+import { formatCount, formatEok, formatHouseholds, longYm, shortYm } from "@/lib/format";
 import { axisLayout, chartPad, Crosshair, fx, GridLines, HoverDot, pointerSelect, readoutRow, Swatch, useWidth, XAxis, YearMarks, YLabel } from "./chartKit";
 
 // 지역별 '입주 세대(막대) + 전세 중위가(선)'. 단위가 달라 한 축에 겹치지 않고 위아래 두 칸으로 나눈다.
@@ -76,7 +76,7 @@ function Panel({ p, months, partialFrom, nowIdx, h, setHover }: {
         <span className="font-sans text-sm font-semibold text-ink">{p.name}</span>
         <span className="font-semibold text-ink">{longYm(months[h])}</span>
         <Swatch color="var(--series-2)" label="전세 중위" value={formatEok(p.jeonse[h])} />
-        <Swatch color={p.color} label="입주" value={`${p.supply[h].toLocaleString()}세대`} />
+        <Swatch color={p.color} label="입주" value={formatHouseholds(p.supply[h])} />
       </div>
       <div ref={ref} className="w-full select-none" style={{ minHeight: LH + BH + XH }}>
         {w > 0 && (
@@ -101,7 +101,7 @@ function Panel({ p, months, partialFrom, nowIdx, h, setHover }: {
               <path d={future} fill={p.color} fillOpacity={0.4} />
               <Crosshair x={hx} height={BH} />
               <path d={`M${L0} ${BH - BB + 0.5} H${w - R0}`} stroke="var(--axis)" />
-              <text x={w - R0 + 6} y={by(bt[bt.length - 1]) + 9} className="mono" fontSize={10} fill="var(--muted)">{bt[bt.length - 1].toLocaleString()}</text>
+              <text x={w - R0 + 6} y={by(bt[bt.length - 1]) + 9} className="mono" fontSize={10} fill="var(--muted)">{formatCount(bt[bt.length - 1])}</text>
             </svg>
             <XAxis ts={ts} w={w} h={h} label={shortYm(months[h])} layout={layout} height={XH} />
           </>

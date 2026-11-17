@@ -1,3 +1,5 @@
+// 화면용 DB 조회 (서버 전용). numeric 열은 PostgREST가 JSON 숫자로 주므로 그대로 number로 쓴다
+// (마이그레이션 테스트의 PGlite는 numeric을 문자열로 주지만 화면 조회와는 관계없다).
 import "server-only";
 import { db } from "./db";
 import { check, selectAll } from "./supa";
@@ -294,13 +296,7 @@ export interface RenewalRow {
 
 export async function getRenewal(groupId: number | null, band: number | null, from: string, to: string): Promise<RenewalRow[]> {
   const res = await db().rpc("renewal_monthly", { p_group_id: groupId, p_area_band: band, p_from: from, p_to: to });
-  const num = (v: unknown) => (v == null ? null : Number(v)); // numeric은 문자열로 온다
-  return (check(res, "renewal_monthly") as RenewalRow[]).map((r) => ({
-    ...r,
-    change_median: num(r.change_median),
-    free_change_median: num(r.free_change_median),
-    rr_change_median: num(r.rr_change_median),
-  }));
+  return check(res, "renewal_monthly") as RenewalRow[];
 }
 
 export interface RenewalDrop {
@@ -339,10 +335,7 @@ export interface RentMonthlyRow {
 
 export async function getRentMonthly(groupId: number | null, band: number | null, from: string, to: string): Promise<RentMonthlyRow[]> {
   const res = await db().rpc("rent_monthly", { p_group_id: groupId, p_area_band: band, p_from: from, p_to: to });
-  return (check(res, "rent_monthly") as RentMonthlyRow[]).map((r) => ({
-    ...r,
-    conv_rate_median: r.conv_rate_median == null ? null : Number(r.conv_rate_median), // numeric은 문자열로 온다
-  }));
+  return check(res, "rent_monthly") as RentMonthlyRow[];
 }
 
 // ---------- 새로 신고된 거래 ----------
@@ -383,7 +376,7 @@ export const NEW_DEAL_LIMIT = 500;
 /** since(ISO 시각) 이후 수집에서 처음 본 매매, 최근 수집 순. aptSeqs를 주면 그 단지들만 (관심 단지) */
 export async function getNewTrades(since: string, groupId: number | null, aptSeqs?: string[]): Promise<NewTrade[]> {
   const res = await db().rpc("new_trades", { p_since: since, p_group_id: groupId, p_limit: NEW_DEAL_LIMIT, p_apt_seqs: aptSeqs ?? null });
-  return (check(res, "new_trades") as NewTrade[]).map((r) => ({ ...r, event_pct: r.event_pct == null ? null : Number(r.event_pct) }));
+  return check(res, "new_trades") as NewTrade[];
 }
 
 export async function getNewRents(since: string, groupId: number | null, aptSeqs?: string[]): Promise<NewRent[]> {
@@ -493,7 +486,7 @@ export interface RateRow {
 
 export async function getRates(from: string, to: string): Promise<RateRow[]> {
   const res = await db().from("rates_monthly").select("series, ym, value").gte("ym", from).lte("ym", to).order("ym");
-  return (check(res, "rates_monthly") as RateRow[]).map((r) => ({ ...r, value: Number(r.value) }));
+  return check(res, "rates_monthly") as RateRow[];
 }
 
 // ---------- 부동산원 주간 지수 (시군구) ----------
@@ -507,7 +500,7 @@ export interface WeeklyIndexRow {
 
 /** from·to는 YYYY-MM-DD. 여러 구 × 2종 × 5년이면 천 행이 넘어 나눠 받는다. */
 export async function getWeeklyIndex(regionIds: number[], kinds: ("sale" | "jeonse")[], from: string, to: string): Promise<WeeklyIndexRow[]> {
-  const rows = await selectAll<WeeklyIndexRow>(
+  return selectAll<WeeklyIndexRow>(
     (a, b) =>
       db()
         .from("price_index_weekly")
@@ -522,7 +515,6 @@ export async function getWeeklyIndex(regionIds: number[], kinds: ("sale" | "jeon
         .range(a, b),
     "price_index_weekly",
   );
-  return rows.map((r) => ({ ...r, value: Number(r.value) }));
 }
 
 // ---------- 수집 상태 ----------

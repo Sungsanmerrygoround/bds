@@ -1,14 +1,56 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FavButton } from "./FavButton";
 import { barPath, seriesPaths } from "@/lib/chart";
+import { formatYm } from "@/lib/format";
 
-/** 목록 표의 단지 이름: 단지 화면(area가 있으면 그 전용면적)으로 가는 링크 + 흐린 위치 */
-export function ComplexLink({ aptSeq, name, where, area }: { aptSeq: string; name: string; where: string; area?: number }) {
-  return (
+/**
+ * 목록 표의 단지 이름: 단지 화면(area가 있으면 그 전용면적)으로 가는 링크 + 흐린 부가 설명(위치 등).
+ * fav를 주면 앞에 관심 단지 ★ 버튼을 붙인다 (true = 이미 관심 단지).
+ */
+export function ComplexLink({ aptSeq, name, where, area, fav }: { aptSeq: string; name: string; where?: string; area?: number | null; fav?: boolean }) {
+  const link = (
     <>
       <Link href={`/complex/${encodeURIComponent(aptSeq)}${area == null ? "" : `?area=${area}`}`} className="font-medium hover:underline">{name}</Link>
-      <span className="ml-1.5 text-xs text-muted">{where}</span>
+      {where != null && <span className="ml-1.5 text-xs text-muted">{where}</span>}
     </>
+  );
+  if (fav == null) return link;
+  return (
+    <span className="flex items-center gap-1">
+      <FavButton aptSeq={aptSeq} on={fav} name={name} />
+      <span className="min-w-0">{link}</span>
+    </span>
+  );
+}
+
+/** 목록 화면 제목과 설명 (추이·비교처럼 필터 레일이 있는 화면은 제목을 숨기고 쓰지 않는다) */
+export function PageHeader({ title, children, gap = "mb-4" }: { title: string; children: ReactNode; gap?: "mb-3" | "mb-4" }) {
+  return (
+    <>
+      <h1 className="mb-1 text-2xl font-semibold">{title}</h1>
+      <p className={`${gap} text-sm text-ink-2`}>{children}</p>
+    </>
+  );
+}
+
+/** 표에 보여 줄 행이 없을 때의 안내 한 줄 (className: 위아래 여백 등) */
+export function EmptyRow({ cols, children, className = "py-12" }: { cols: number; children: ReactNode; className?: string }) {
+  return <tr><td colSpan={cols} className={`${className} text-center text-muted`}>{children}</td></tr>;
+}
+
+/** 월별 표의 첫 칸: 2026.09 + 신고 기한 안이라 집계 중이면 표시 */
+export function MonthLabel({ ym, partial }: { ym: string; partial: boolean }) {
+  return <>{formatYm(ym)}{partial && <span className="ml-1.5 text-s2">집계 중</span>}</>;
+}
+
+/** 차트 아래 접어 둔 표 */
+export function TableDetails({ summary = "표로 보기", children }: { summary?: string; children: ReactNode }) {
+  return (
+    <details className="panel px-4 py-3 text-sm">
+      <summary className="flex min-h-8 cursor-pointer items-center text-ink-2">{summary}</summary>
+      <div className="overflow-x-auto">{children}</div>
+    </details>
   );
 }
 
