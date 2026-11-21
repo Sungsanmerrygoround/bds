@@ -10,6 +10,9 @@
     "ingest": "tsx ingest/run.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "db:backup": "tsx scripts/db-backup.ts backup",
+    "db:verify-backup": "tsx scripts/db-backup.ts verify",
+    "db:restore": "tsx scripts/db-backup.ts restore",
     "db:push": "node -e \"require('dotenv').config({path:'.env.local',quiet:true});require('child_process').execSync('npx supabase db push --db-url \"'+process.env.SUPABASE_DB_URL+'\"',{stdio:'inherit'})\""
   },
   "dependencies": {
@@ -30,6 +33,7 @@
     "dotenv": "^18.0.4",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "postgres": "^4.1.1",
     "supabase": "^2.118.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",

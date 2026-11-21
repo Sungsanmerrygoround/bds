@@ -46,3 +46,6 @@ next-env.d.ts
 /scripts/verify/node_modules/
 /scripts/verify/pix/
 /scripts/verify/package-lock.json
+
+# DB 백업 (npm run db:backup)
+/backups/

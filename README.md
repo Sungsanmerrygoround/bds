@@ -42,6 +42,31 @@ insert into manual_supply (region_id, name, ym, households, kind, note)
 values (1, '○○주공 재건축 이주', '202705', 1200, '이주', '관리처분 인가 기준');
 ```
 
+## DB 백업 (이 PC)
+
+Supabase 무료 플랜은 자동 백업이 없다. 거래는 API에서 다시 받을 수 있지만 '처음 본 시각'(새 신고)·신고가 판정 이력·직접 입력한 값은 다시 만들 수 없어 따로 받아 둔다.
+
+- `npm run db:backup` → `backups/<시각>/`에 표마다 CSV.gz + `manifest.json` (약 6MB, 10초). 최근 8개만 남긴다.
+  표 구조는 마이그레이션에 있으므로 데이터만 담고, 거래의 원본 응답(`raw`)은 뺀다(`--with-raw`로 포함).
+  `backups/`는 git에서 빠지고 OneDrive가 클라우드로 동기화한다. 다른 곳에 두려면 `BACKUP_DIR`.
+- `npm run db:verify-backup` → 가장 최근 백업을 메모리 Postgres(PGlite, 마이그레이션 적용)에 실제로 복원해 행 수를 대조한다.
+- 자동 실행: `powershell -ExecutionPolicy Bypass -File scriptsackup-task-install.ps1`로 작업 스케줄러에 등록한다.
+  매일 12:30(꺼져 있었으면 켜진 뒤)에 돌지만 최근 백업이 6일 안이면 건너뛰므로 사실상 주 1회이고, 새 백업은 바로 복원 검증한다.
+  기록은 `backups/backup.log`. 지우기: `Unregister-ScheduledTask -TaskName "BDS DB backup" -Confirm:$false`
+- 복원: 새 Postgres(새 Supabase 프로젝트 등)에 `npx supabase db push --db-url <대상>`으로 마이그레이션을 적용한 뒤
+  `npm run db:restore -- backups/<시각> --target <대상 주소> --yes`. 대상의 같은 표를 모두 비우고 채운다
+  (운영 DB 주소면 `--force-production` 없이는 거절).
+
+## 수집 점검
+
+매일 수집 뒤 `npm run ingest -- check`가 '성공했는데 이상한' 경우를 찾는다. 메일은 보내지 않고(실패로 끝내지 않음),
+GitHub Actions 실행 화면에 경고(노란 주석)로만 남는다. 로컬에서 `npm run ingest -- check`로 바로 볼 수도 있다.
+
+- 신고가 끝난 달(2달 전)의 시군구별 매매·전월세가 직전 6개월 중위의 15% 미만 (5년치에서 가장 크게 빠진 달이 18.6%)
+- 10일이 지났는데 지난달 거래가 0건
+- 최근 수집에서 한 시군구·달의 거래가 10건 넘게 응답에서 사라졌거나, 20% 넘게 사라져 반영을 건너뜀
+- 부동산원 주간 지수가 14일, 금리가 3개월보다 오래됨
+
 ## 데이터 범위와 용량
 
 송파는 2026-10-11 DB 용량 때문에 뺐다(전월세 행의 1/3). 다시 넣는 방법은 `supabase/migrations/20261011000015_drop_songpa.sql` 주석 참고.

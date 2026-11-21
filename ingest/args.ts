@@ -1,7 +1,7 @@
 // 수집 명령줄 인자: run.ts <job> [--lawd A,B] [--from YYYYMM --to YYYYMM] [--kind trade|rent] [--dry]
 import type { Kind } from "./molit";
 
-export const JOBS = ["backfill", "daily", "supply", "refresh", "rates", "index", "kapt"] as const;
+export const JOBS = ["backfill", "daily", "supply", "refresh", "rates", "index", "kapt", "check"] as const;
 export type Job = (typeof JOBS)[number];
 
 export function parseArgs(argv: string[]) {
