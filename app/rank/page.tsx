@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Dimmed, FilterScope, OptionList, RailLayout } from "../_components/Filters";
 import { ComplexLink, EmptyRow, toneText } from "../_components/ui";
 import { BAND_OPTIONS, bandText, bandValue, parseBand } from "@/lib/area";
@@ -31,6 +32,8 @@ const HOUSEHOLDS = [
   { value: "1000", label: "1000+" },
 ];
 const LIMIT = 100;
+
+export const metadata: Metadata = { title: "단지 순위" };
 
 export default async function RankPage({ searchParams }: PageProps<"/rank">) {
   const sp = await searchParams;

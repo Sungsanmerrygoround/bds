@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findGroup, findOption, groupLabel, groupOptions, groupValue, isAptSeq, paramStr, safeDecode } from "./params";
+import { findGroup, findOption, groupLabel, groupOptions, groupValue, isAptSeq, pageIndex, paramStr, safeDecode, withParam } from "./params";
 
 describe("params", () => {
   it("paramStr: 문자열 하나만", () => {
@@ -50,5 +50,16 @@ describe("지역 선택지 · 단지 코드", () => {
     expect(safeDecode("a%20b")).toBe("a b");
     expect(safeDecode("%E0%A4")).toBeNull();
     expect(safeDecode("abc%")).toBeNull();
+  });
+});
+
+describe("쪽 번호", () => {
+  it("pageIndex: ?p=1이 첫 쪽(0), 잘못된 값은 0", () => {
+    expect([pageIndex(undefined), pageIndex("1"), pageIndex("3"), pageIndex("0"), pageIndex("x"), pageIndex("1.5"), pageIndex(["2"])]).toEqual([0, 0, 2, 0, 0, 0, 0]);
+  });
+  it("withParam: 다른 파라미터는 두고 하나만 바꾸거나 지운다", () => {
+    expect(withParam("/events", { m: "3", p: "2" }, "p", "3")).toBe("/events?m=3&p=3");
+    expect(withParam("/events", { m: "3", p: "2" }, "p", null)).toBe("/events?m=3");
+    expect(withParam("/events", { p: "2", x: ["a", "b"] }, "p", null)).toBe("/events");
   });
 });

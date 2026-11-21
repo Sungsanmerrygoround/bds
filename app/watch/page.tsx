@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { FavButton } from "../_components/FavButton";
 import { Badge, ComplexLink } from "../_components/ui";
@@ -32,6 +33,8 @@ function EventBadge({ s }: { s: ComplexStats }) {
     </span>
   );
 }
+
+export const metadata: Metadata = { title: "관심 단지" };
 
 export default async function WatchPage() {
   const favs = await getFavorites();

@@ -38,3 +38,21 @@ export function safeDecode(s: string): string | null {
     return null;
   }
 }
+
+/** 목록 쪽 번호 파라미터 (?p=2 = 둘째 쪽). 필터를 바꾸면 지운다 */
+export const PAGE_PARAM = "p";
+
+/** ?p 값 → 0부터 세는 쪽 번호 (없거나 잘못된 값이면 0) */
+export function pageIndex(v: Param): number {
+  const n = Number(paramStr(v));
+  return Number.isInteger(n) && n >= 1 ? n - 1 : 0;
+}
+
+/** 현재 검색 파라미터에서 하나만 바꾼 주소 (값이 null이면 지움) */
+export function withParam(path: string, sp: Record<string, Param>, key: string, value: string | null): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) if (k !== key && typeof v === "string") q.set(k, v);
+  if (value != null) q.set(key, value);
+  const s = q.toString();
+  return s ? `${path}?${s}` : path;
+}

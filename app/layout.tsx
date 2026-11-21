@@ -11,7 +11,7 @@ import "./globals.css";
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "BDS 실거래 대시보드",
+  title: { default: "BDS 실거래 대시보드", template: "%s · BDS" },
   description: "관심 지역 아파트 매매·전세 추이, 신고가·하락 거래, 입주 물량",
 };
 

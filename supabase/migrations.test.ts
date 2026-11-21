@@ -60,6 +60,26 @@ describe("migrations", () => {
   });
 });
 
+describe("화면이 부르는 집계 함수", () => {
+  // 함수 본문이 참조하는 표는 호출할 때에야 확인되므로, 표를 지우는 마이그레이션이 함수를 깨뜨려도 적용은 성공한다
+  // (2026-11-21 complex_aliases 삭제로 complex_search가 깨졌던 일). 마지막 마이그레이션 뒤에 모두 실제로 호출해 본다.
+  it.each([
+    "select * from complex_search('테스트', null, 10)",
+    "select * from complex_search('', 1, 10)",
+    "select * from trend_monthly(1, null, '202401', '202412')",
+    "select * from complex_rank(null, null, '202412')",
+    "select * from complex_stats(array['T-1'])",
+    "select * from renewal_monthly(null, null, '202401', '202412')",
+    "select * from renewal_drops(null, null, '2024-01-01', 10)",
+    "select * from rent_monthly(null, null, '202401', '202412')",
+    "select * from new_trades(now() - interval '7 days', null, 10, null)",
+    "select * from new_rents(now() - interval '7 days', 1, 10, array['T-1'])",
+    "select * from cancelled_trades(null, '2024-01-01', 10)",
+  ])("%s", async (sql) => {
+    await expect(db.query(sql)).resolves.toBeDefined();
+  });
+});
+
 describe("trend_monthly", () => {
   it("월별 매매·전세 중위가, 해제·월세 제외, 면적 구간 필터", async () => {
     await trade({ date: "2019-03-05", price: 50000, seq: "T-2" });

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { MetricChart } from "../_components/MetricChart";
 import { RateChart } from "../_components/RateChart";
@@ -14,6 +15,8 @@ import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, monthStart,
 
 const MIN_N = 5; // 한 달 표본이 이보다 적으면 비율을 그리지 않는다
 const share = (a: number, b: number) => sharePct(a, b, MIN_N);
+
+export const metadata: Metadata = { title: "전세 갱신" };
 
 export default async function RenewalPage({ searchParams }: PageProps<"/renewal">) {
   const sp = await searchParams;

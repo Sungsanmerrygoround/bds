@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CompareCharts, type CompareSeries } from "../../_components/CompareCharts";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
@@ -17,6 +18,8 @@ import { isNewContract, jeonseRatio, median, rollingMedian } from "@/lib/stats";
 const MAX = 5;
 
 const pctText = (v: number | null) => (v == null ? "-" : `${Math.round(v)}%`);
+
+export const metadata: Metadata = { title: "단지 비교" };
 
 export default async function ComplexComparePage({ searchParams }: PageProps<"/complex/compare">) {
   const sp = await searchParams;

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { CompareCharts, type CompareSeries } from "../_components/CompareCharts";
 import { PeakTable } from "../_components/PeakTable";
@@ -10,6 +11,8 @@ import { rebase, weeklyValues } from "@/lib/chart";
 import { getGroups, getTrend, getWeeklyIndex } from "@/lib/queries";
 import { byMonth, currentYm, DATA_START, lastCompleteYm, minYm, monthEnd, monthsBetween, monthStart, partialIndex, rangeLabel, resolveRange } from "@/lib/range";
 import { peakRecovery } from "@/lib/stats";
+
+export const metadata: Metadata = { title: "지역 비교" };
 
 export default async function ComparePage({ searchParams }: PageProps<"/compare">) {
   const sp = await searchParams;

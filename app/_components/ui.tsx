@@ -44,6 +44,19 @@ export function MonthLabel({ ym, partial }: { ym: string; partial: boolean }) {
   return <>{formatYm(ym)}{partial && <span className="ml-1.5 text-s2">집계 중</span>}</>;
 }
 
+/** 목록 쪽 넘김: hrefOf(i)는 i번째(0부터) 쪽 주소. 한 쪽뿐이면 그리지 않는다 */
+export function Pager({ page, pages, hrefOf }: { page: number; pages: number; hrefOf: (i: number) => string }) {
+  if (pages <= 1) return null;
+  const btn = "flex min-h-10 items-center rounded border border-line px-3 text-sm";
+  return (
+    <nav aria-label="쪽 넘김" className="mt-3 flex items-center justify-center gap-2">
+      {page > 0 ? <Link href={hrefOf(page - 1)} className={`${btn} text-ink-2 hover:bg-wash`}>← 이전</Link> : <span className={`${btn} text-muted opacity-50`}>← 이전</span>}
+      <span className="mono px-2 text-sm text-ink-2">{page + 1} / {pages}</span>
+      {page < pages - 1 ? <Link href={hrefOf(page + 1)} className={`${btn} text-ink-2 hover:bg-wash`}>다음 →</Link> : <span className={`${btn} text-muted opacity-50`}>다음 →</span>}
+    </nav>
+  );
+}
+
 /** 차트 아래 접어 둔 표 */
 export function TableDetails({ summary = "표로 보기", children }: { summary?: string; children: ReactNode }) {
   return (

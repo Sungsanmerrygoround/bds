@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../../_components/Filters";
@@ -20,6 +21,12 @@ function countByArea(rows: { area_type: number }[]): Map<number, number> {
   const out = new Map<number, number>();
   for (const r of rows) out.set(r.area_type, (out.get(r.area_type) ?? 0) + 1);
   return out;
+}
+
+export async function generateMetadata({ params }: PageProps<"/complex/[aptSeq]">): Promise<Metadata> {
+  const aptSeq = safeDecode((await params).aptSeq);
+  const complex = aptSeq && isAptSeq(aptSeq) ? await getComplex(aptSeq) : null;
+  return { title: complex?.apt_nm ?? "단지" };
 }
 
 export default async function ComplexPage({ params, searchParams }: PageProps<"/complex/[aptSeq]">) {

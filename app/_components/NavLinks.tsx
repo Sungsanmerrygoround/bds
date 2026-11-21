@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
@@ -27,12 +27,20 @@ export function NavLinks() {
             key={l.href}
             href={l.href}
             aria-current={active ? "page" : undefined}
-            className={`flex min-h-11 shrink-0 items-center whitespace-nowrap px-3 sm:rounded sm:px-3.5 ${active ? "font-semibold text-ink shadow-[inset_0_-2px_0_var(--series-1)] sm:bg-raised sm:shadow-none" : "text-ink-2 hover:bg-wash"}`}
+            className={`relative flex min-h-11 shrink-0 items-center whitespace-nowrap px-3 sm:rounded sm:px-3.5 ${active ? "font-semibold text-ink shadow-[inset_0_-2px_0_var(--series-1)] sm:bg-raised sm:shadow-none" : "text-ink-2 hover:bg-wash"}`}
           >
             {l.label}
+            <PendingBar />
           </Link>
         );
       })}
     </nav>
   );
+}
+
+/** 메뉴를 누른 뒤 새 화면이 올 때까지 그 메뉴 아래에 깜박이는 줄 (Link 안에서만 동작) */
+function PendingBar() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return <span aria-hidden="true" className="absolute inset-x-2 bottom-0 h-0.5 animate-pulse rounded-full bg-s2" />;
 }

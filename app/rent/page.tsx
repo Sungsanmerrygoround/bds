@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "../_components/Filters";
 import { MetricChart } from "../_components/MetricChart";
 import { rateValues } from "../_components/RateChart";
@@ -14,6 +15,8 @@ import { addMonths, currentYm, lastCompleteYm, minYm, monthsBetween, partialFrom
 
 const MIN_N = 5; // 한 달 표본이 이보다 적으면 그리지 않는다
 const LEGAL_SPREAD = 2; // 법정 전월세 전환율 상한 = 기준금리 + 2%p (주택임대차보호법 시행령, 계약 중 전환에 적용)
+
+export const metadata: Metadata = { title: "월세" };
 
 export default async function RentPage({ searchParams }: PageProps<"/rent">) {
   const sp = await searchParams;

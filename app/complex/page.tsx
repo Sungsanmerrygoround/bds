@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { inputCls, outlineLinkCls } from "../_components/styles";
 import { ComplexLink, EmptyRow } from "../_components/ui";
 import { getFavorites } from "@/lib/favorites";
 import { findGroup, paramStr } from "@/lib/params";
 import { getGroups, searchComplexes } from "@/lib/queries";
+
+export const metadata: Metadata = { title: "단지 찾기" };
 
 export default async function ComplexSearchPage({ searchParams }: PageProps<"/complex">) {
   const sp = await searchParams;

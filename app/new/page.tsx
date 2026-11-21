@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
@@ -66,6 +67,12 @@ function DayRows<T extends { id: number; first_seen_at: string }>({ groups, cols
       {g.rows.map((r) => children(r, g.day))}
     </Fragment>
   ));
+}
+
+/** 즐겨찾기로 쓰는 화면이라 관심 단지만(?fav=1)·전월세는 탭 제목으로도 구분한다 */
+export async function generateMetadata({ searchParams }: PageProps<"/new">): Promise<Metadata> {
+  const sp = await searchParams;
+  return { title: `${sp.fav === "1" ? "관심 단지 " : ""}새 신고${sp.kind === "rent" ? " (전월세)" : ""}` };
 }
 
 export default async function NewDealsPage({ searchParams }: PageProps<"/new">) {

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Dimmed, FilterScope, OptionList, RailLayout, RangeList } from "./_components/Filters";
 import { PeakTable } from "./_components/PeakTable";
 import { RateChart } from "./_components/RateChart";
@@ -12,6 +13,9 @@ import { addMonths, currentYm, DATA_START, lastCompleteYm, minYm, monthsBetween,
 import { jeonseRatio, pctChange, peakRecovery } from "@/lib/stats";
 
 const ratioOf = (d?: TermPoint) => jeonseRatio(d?.trade, d?.jeonse);
+
+// 레이아웃의 제목 틀(%s · BDS)은 같은 단계의 첫 화면에는 적용되지 않아 직접 적는다
+export const metadata: Metadata = { title: { absolute: "추이 · BDS" } };
 
 export default async function TrendPage({ searchParams }: PageProps<"/">) {
   const sp = await searchParams;

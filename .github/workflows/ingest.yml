@@ -4,6 +4,8 @@ name: ingest
 # 매주 월요일 KST 07:40 청약홈 입주 물량 + 3~8개월 전 매매 재수집(나중에 채워지는 등기일 반영) + 금리 + K-apt 단지 기본정보
 #   (K-apt는 없는·60일 지난 단지만 받아 캐시에 쌓으므로 평소엔 호출이 적고, 장애로 끊겨도 다음 주에 이어 받는다).
 # 실거래 외 수집은 단계를 나눠, 하나가 실패해도 나머지는 돈다 (실패하면 실행 전체가 실패로 표시되고 메일이 간다).
+# 주 작업이 실패하면 20분 뒤 한 번 더 한다 (data.go.kr이 몇 분씩 응답하지 않는 날이 있다).
+# 각 수집은 끝날 때 대시보드 조회 캐시를 비운다 (REVALIDATE_SECRET, Vercel에도 같은 값).
 on:
   schedule:
     - cron: "10 22 * * *" # 매일 22:10 UTC = KST 07:10
@@ -22,17 +24,20 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write # 예약 실행이 60일 무활동으로 꺼지지 않게 워크플로를 다시 켜 두는 단계용
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }} # 금리 (rates)
       REB_API_KEY: ${{ secrets.REB_API_KEY }} # 부동산원 주간 지수 (index)
+      REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }} # 없으면 캐시 비우기만 건너뜀 (캐시는 1시간 뒤 저절로 갱신)
+      REVALIDATE_URL: https://bds-black.vercel.app/api/revalidate
       JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '40 22 * * 0' && 'supply' || 'daily') }}
     steps:
       - uses: actions/checkout@v5
@@ -52,7 +57,16 @@ jobs:
           done
           case "$SUPABASE_URL" in https://*.supabase.co|https://*.supabase.co/) ;; *) echo "::error::SUPABASE_URL 형식이 https://<ref>.supabase.co 가 아닙니다"; fail=1;; esac
           exit $fail
-      - run: npm run ingest -- "$JOB"
+      - name: 주 작업
+        id: main
+        continue-on-error: true
+        run: npm run ingest -- "$JOB"
+      - name: 주 작업 재시도 (실패 시 20분 뒤 한 번)
+        if: ${{ !cancelled() && steps.main.outcome == 'failure' }}
+        run: |
+          echo "::warning::주 작업($JOB)이 실패해 20분 뒤 다시 실행합니다"
+          sleep 1200
+          npm run ingest -- "$JOB"
       - name: 부동산원 주간 지수 (매일)
         if: ${{ !cancelled() && github.event.schedule == '10 22 * * *' }}
         run: npm run ingest -- index
@@ -65,3 +79,9 @@ jobs:
       - name: K-apt 단지 기본정보 (주간)
         if: ${{ !cancelled() && github.event.schedule == '40 22 * * 0' }}
         run: npm run ingest -- kapt
+      - name: 예약 실행 유지 (공개 저장소는 60일 동안 커밋이 없으면 GitHub가 예약 실행을 끈다)
+        if: ${{ !cancelled() && github.event.schedule == '40 22 * * 0' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/ingest.yml/enable"

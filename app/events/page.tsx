@@ -1,11 +1,12 @@
+import type { Metadata } from "next";
 import { EventTabs } from "../_components/EventTabs";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
-import { Badge, ComplexLink, EmptyRow, PageHeader } from "../_components/ui";
+import { Badge, ComplexLink, EmptyRow, PageHeader, Pager } from "../_components/ui";
 import { SAMPLE_OPTIONS } from "./options";
 import { formatEok, formatPct } from "@/lib/format";
-import { findGroup, findOption, groupOptions, groupValue } from "@/lib/params";
-import { EVENT_LIMIT, getEvents, getGroups, type EventRow } from "@/lib/queries";
-import { monthsAgo, todayKst } from "@/lib/range";
+import { findGroup, findOption, groupOptions, groupValue, PAGE_PARAM, pageIndex, withParam } from "@/lib/params";
+import { EVENT_PAGE, getEventCounts, getEvents, getGroups, type EventFilter, type EventRow } from "@/lib/queries";
+import { addDays, monthsAgo, todayKst } from "@/lib/range";
 import { isUnregistered, UNREGISTERED_DAYS } from "@/lib/stats";
 
 const PERIODS = [
@@ -20,6 +21,8 @@ const TYPES: { value: "all" | EventRow["type"]; label: string }[] = [
   { value: "DROP", label: "하락" },
 ];
 
+export const metadata: Metadata = { title: "신고가·하락" };
+
 export default async function EventsPage({ searchParams }: PageProps<"/events">) {
   const sp = await searchParams;
   const groups = await getGroups();
@@ -30,14 +33,18 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
   const excludeDirect = sp.nodirect === "1";
   const includeInvalid = sp.invalid === "1";
 
-  const events = await getEvents({
+  const filter: EventFilter = {
     type: typeValue === "all" ? null : typeValue, groupId, minSamples: Number(minSamples), includeDirect: !excludeDirect, includeInvalid,
     since: monthsAgo(Number(months)),
-  });
-  const highs = events.filter((e) => e.type === "NEW_HIGH").length;
+  };
   const today = todayKst();
+  const counts = await getEventCounts(filter, addDays(today, -UNREGISTERED_DAYS));
+  const total = counts.highs + counts.drops;
+  const pages = Math.max(1, Math.ceil(total / EVENT_PAGE));
+  const page = Math.min(pageIndex(sp[PAGE_PARAM]), pages - 1);
+  const events = total === 0 ? [] : await getEvents(filter, page);
   const unreg = (e: EventRow) => !!e.apt_trades && isUnregistered({ deal_date: e.deal_date, ...e.apt_trades }, today);
-  const unregCount = events.filter(unreg).length;
+  const pageHref = (i: number) => withParam("/events", sp, PAGE_PARAM, i === 0 ? null : String(i + 1));
 
   return (
     <FilterScope>
@@ -56,10 +63,10 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
 
       <Dimmed>
         <p className="mb-2 text-sm text-ink-2">
-          {events.length}건 (신고가 {highs} · 하락 {events.length - highs})
-          {unregCount > 0 && <span className="text-warn"> · 미등기 {unregCount}건</span>}
-          {unregCount > 0 && <span className="text-muted"> (계약 후 {UNREGISTERED_DAYS}일이 지나도 등기 정보 없음 — 잔금이 긴 정상 거래일 수도 있습니다)</span>}
-          {events.length >= EVENT_LIMIT && <span className="text-muted"> — 최근 {EVENT_LIMIT}건까지만 표시합니다. 조건을 좁혀 보세요.</span>}
+          {total}건 (신고가 {counts.highs} · 하락 {counts.drops})
+          {counts.unreg > 0 && <span className="text-warn"> · 미등기 {counts.unreg}건</span>}
+          {counts.unreg > 0 && <span className="text-muted"> (계약 후 {UNREGISTERED_DAYS}일이 지나도 등기 정보 없음 — 잔금이 긴 정상 거래일 수도 있습니다)</span>}
+          {pages > 1 && <span className="text-muted"> · {page * EVENT_PAGE + 1}~{page * EVENT_PAGE + events.length}번째</span>}
         </p>
         <div className="panel overflow-x-auto">
           <table className="mono w-full min-w-[760px] text-[13px]">
@@ -105,6 +112,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
             </tbody>
           </table>
         </div>
+        <Pager page={page} pages={pages} hrefOf={pageHref} />
       </Dimmed>
     </FilterScope>
   );

@@ -14,6 +14,14 @@
   - 넓은 화면은 왼쪽 필터 레일, 좁은 화면(1024px 미만)은 요약 칩 + 바텀시트
 - `lib/` 순수 로직(기간·면적 구간·차트 경로·순위 지표)과 서버 전용 DB 조회(`queries.ts`)
   - 화면 공통 부품은 `app/_components/ui.tsx`(단지 링크·빈 행·표로 보기 등), 입력칸·버튼 모양은 `styles.ts`
+- `scripts/verify/` 브라우저 화면 검사 도구(운영과 픽셀 비교, e2e 등 — 앱과 의존성 분리, 사용법은 그 폴더 README)
+
+## 조회 캐시
+
+화면의 DB 조회 결과는 Vercel 데이터 캐시에 둔다(`lib/queries.ts`의 `cached`, 1시간). 수집이 끝나면 GitHub Actions가
+`POST /api/revalidate`(헤더 `Authorization: Bearer <REVALIDATE_SECRET>`)를 불러 캐시를 비우므로, 수집 직후에도 새 데이터가 보인다.
+이 호출이 없거나 실패해도 1시간이 지나면 다음 요청이 이전 결과를 바로 받고 뒤에서 새로 조회한다.
+DB를 직접 고친 뒤(예: `manual_supply` 입력) 바로 보려면 같은 주소를 직접 부르면 된다.
 
 ## 집계 기준
 
@@ -45,7 +53,8 @@ DB가 다시 한도에 가까워지면 거래 행의 원본 응답(`raw`, 약 13
 ## 배포
 
 https://bds-black.vercel.app — Vercel(`hj20/bds`, 함수 지역 서울 `icn1`). `main`에 push하면 자동 배포된다.
-Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `REVALIDATE_SECRET`(GitHub Secret과 같은 값).
+`main`에 push하면 `.github/workflows/ci.yml`이 타입 검사·테스트·린트를 돌린다(실패하면 메일).
 
 ## 로컬 실행
 
@@ -71,6 +80,10 @@ Vercel 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role 키 |
 | `ECOS_API_KEY` | 한국은행 ECOS 인증키 (`rates`) |
 | `REB_API_KEY` | 한국부동산원 R-ONE 인증키 (`index`) |
+| `REVALIDATE_SECRET` | 수집 후 대시보드 캐시 비우기용 임의 문자열 (Vercel에도 같은 값. 없으면 캐시가 1시간 뒤에 갱신될 뿐) |
+
+주 작업이 실패하면 20분 뒤 한 번 더 실행한다. 월요일 실행은 워크플로를 다시 켜 두어, 공개 저장소에 60일 동안 커밋이 없어도
+예약 실행이 꺼지지 않게 한다. 비정상 종료로 `running`에 남은 수집 기록은 다음 실행이 닫는다.
 
 `SUPABASE_DB_URL`은 마이그레이션용이라 등록하지 않는다. Actions 탭에서 `ingest` → Run workflow로 수동 실행할 수 있다.
 

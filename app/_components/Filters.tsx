@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { shortYm } from "@/lib/format";
+import { PAGE_PARAM } from "@/lib/params";
 import { RANGE_PRESETS } from "@/lib/range";
 import { inputCls } from "./styles";
 
@@ -43,6 +44,7 @@ export function FilterScope({ children }: { children: ReactNode }) {
 
   const setParams = (u: Updates) => {
     const next = new URLSearchParams(live ? live.qs : spKey);
+    next.delete(PAGE_PARAM); // 조건이 바뀌면 목록 쪽 번호는 처음으로
     for (const [k, v] of Object.entries(u)) {
       if (v == null || v === "") next.delete(k);
       else next.set(k, v);

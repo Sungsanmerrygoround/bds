@@ -1,0 +1,29 @@
+name: ci
+
+# main에 push하면 Vercel이 바로 배포하므로, 같은 시점에 테스트·타입 검사·린트를 돌려 깨진 것을 바로 알린다
+# (실패하면 GitHub가 메일을 보낸다). DB나 API 키는 쓰지 않는다 — 마이그레이션 테스트는 PGlite로 돈다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 라우트 타입 생성 (PageProps 등)
+        run: npx next typegen
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint

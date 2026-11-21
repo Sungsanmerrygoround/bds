@@ -9,7 +9,9 @@
 // 옵션: --lawd 41117,41131  --from 202607 --to 202607  --kind trade|rent  --dry(DB 없이 결과만 출력)
 
 import "./env";
-import { parseArgs } from "./args";
+import { parseArgs, type Args } from "./args";
+import { serviceClient } from "./db";
+import { closeStuckRuns, revalidateDashboard } from "./finish";
 import { runDeals, runDry } from "./jobs/deals";
 import { runKapt } from "./jobs/kapt";
 import { runRates } from "./jobs/rates";
@@ -19,6 +21,18 @@ import { annotateError } from "./runlog";
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.dry) return runJob(args);
+  const closed = await closeStuckRuns(serviceClient());
+  if (closed > 0) console.log(`running으로 남은 이전 수집 기록 ${closed}건을 닫음`);
+  try {
+    await runJob(args);
+  } finally {
+    // 일부만 저장하고 실패했어도 저장된 만큼은 화면에 보이게
+    await revalidateDashboard();
+  }
+}
+
+async function runJob(args: Args) {
   if (args.job === "rates") return runRates(args);
   if (args.job === "kapt") return runKapt(args);
   if (args.job === "index") return runIndex(args);

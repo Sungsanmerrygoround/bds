@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 !.env.example
+
+# 화면 검사 도구 출력·의존성
+/scripts/verify/node_modules/
+/scripts/verify/pix/
+/scripts/verify/package-lock.json

@@ -1,0 +1,11 @@
+{
+  "name": "bds-verify",
+  "private": true,
+  "type": "module",
+  "description": "브라우저로 화면을 검사하는 도구 (앱 의존성과 분리: cd scripts/verify && npm i && npx playwright install chromium)",
+  "dependencies": {
+    "pixelmatch": "^8.0.0",
+    "playwright": "^1.65.1",
+    "pngjs": "^7.0.0"
+  }
+}

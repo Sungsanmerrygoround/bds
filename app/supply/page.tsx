@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../_components/Filters";
 import { Legend, SupplyChart, type SupplyPoint } from "../_components/Charts";
 import { SupplyJeonse } from "../_components/SupplyJeonse";
@@ -18,6 +19,8 @@ const WINDOWS = [
   { value: "0", label: "향후 3년", past: 0, future: 36 },
   { value: "36", label: "과거 3년 ~ 향후 3년", past: 36, future: 36 },
 ];
+
+export const metadata: Metadata = { title: "입주 물량" };
 
 export default async function SupplyPage({ searchParams }: PageProps<"/supply">) {
   const sp = await searchParams;

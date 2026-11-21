@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { EventTabs } from "../../_components/EventTabs";
 import { Dimmed, FilterBar, FilterScope, ParamSelect, ParamToggle } from "../../_components/Filters";
 import { Badge, ComplexLink, EmptyRow, PageHeader, Stat } from "../../_components/ui";
@@ -21,6 +22,8 @@ const PERIODS = [
 
 /** 계약 당시 신고가였나: 직전 36개월 비교 거래가 minSamples건 이상이고 그 최고가를 넘었다 */
 const wasHigh = (t: CancelledTrade, minSamples: number) => t.prev_max != null && t.prev_count >= minSamples && t.price_man > t.prev_max;
+
+export const metadata: Metadata = { title: "해제된 거래" };
 
 export default async function CancelledPage({ searchParams }: PageProps<"/events/cancelled">) {
   const sp = await searchParams;
